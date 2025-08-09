@@ -1,0 +1,27 @@
+name: Deploy Project
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+    
+    - name: Deploy files
+      run: |
+        echo "Deploying project..."
+        echo "Files in repository:"
+        ls -la
+        echo "Deployment completed!"
