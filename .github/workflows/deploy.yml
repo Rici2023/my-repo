@@ -37,34 +37,25 @@ jobs:
             --exclude "node_modules" \
             ./  ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/var/www/app
 
-      - name: Write .env on server
+      - name: Write .env on server (optional)
         if: ${{ secrets.ENV_PROD != '' }}
         run: |
-          ssh -p "${{ secrets.SSH_PORT }}" ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
-          "install -d /var/www/app && cat > /var/www/app/.env << 'EOF'
+          ssh -p "${{ secrets.SSH_PORT }}" ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "
+            install -d /var/www/app && cat > /var/www/app/.env << 'EOF'
 ${{ secrets.ENV_PROD }}
-EOF"
+EOF
+          "
 
       - name: Build & run with Docker Compose
-        env:
-          COMPOSE_PROJECT_NAME: ${{ secrets.COMPOSE_PROJECT_NAME || 'app' }}
         run: |
           ssh -p "${{ secrets.SSH_PORT }}" ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} '
-            set -euo pipefail
+            set -e
             cd /var/www/app
             docker compose pull || true
             docker compose build --no-cache
             docker compose up -d --remove-orphans
           '
 
-      # (opcjonalnie) odkomentuj jeśli używasz Prisma/Knex/TypeORM itd.
-      # - name: Run DB migrations
-      #   run: |
-      #     ssh -p "${{ secrets.SSH_PORT }}" ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
-      #     "cd /var/www/app && docker compose exec -T app npx prisma migrate deploy || true"
-
       - name: Healthcheck
-        # Podmień URL na domenę lub IP:port Twojej aplikacji
         run: |
           curl -fsS --max-time 20 http://128.140.109.251:3000/ || (echo "Healthcheck failed" && exit 1)
-
