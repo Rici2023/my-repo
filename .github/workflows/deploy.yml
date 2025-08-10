@@ -2,8 +2,8 @@ name: Deploy to Hetzner (Docker Compose)
 
 on:
   push:
-    branches: [ "**" ]   # <— reaguj na każdy branch (w tym "my-repo")
-  workflow_dispatch: {}  # <— przycisk "Run workflow"
+    branches: [ "**" ]
+  workflow_dispatch: {}
 
 concurrency:
   group: deploy-hetzner
@@ -37,14 +37,15 @@ jobs:
             --exclude "node_modules" \
             ./  ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/var/www/app
 
-      # PROSTY i pewny sposób na .env:
-      # Tworzymy plik .env na runnerze i wysyłamy scp na serwer.
-      - name: Upload .env to server (optional)
-        if: ${{ secrets.ENV_PROD != '' }}
+      - name: Upload .env to server (only if ENV_PROD set)
         run: |
-          printf "%s" "${{ secrets.ENV_PROD }}" > .env
-          scp -P "${{ secrets.SSH_PORT }}" .env ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/var/www/app/.env
-          rm -f .env
+          if [ -n "${{ secrets.ENV_PROD }}" ]; then
+            echo "${{ secrets.ENV_PROD }}" > .env
+            scp -P "${{ secrets.SSH_PORT }}" .env ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/var/www/app/.env
+            rm -f .env
+          else
+            echo "No ENV_PROD secret set, skipping .env upload."
+          fi
 
       - name: Build & run with Docker Compose
         run: |
