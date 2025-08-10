@@ -13,14 +13,24 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+
     env:
       SSH_HOST: ${{ secrets.SSH_HOST }}
       SSH_USER: ${{ secrets.SSH_USER }}
-      SSH_PORT: ${{ secrets.SSH_PORT || '22' }}
+      SSH_PORT: ${{ secrets.SSH_PORT }}          # domyślka 22 ustawiana w skryptach
+      ENV_PROD: ${{ secrets.ENV_PROD }}          # do opcjonalnego .env
+      # Klucz idzie bezpośrednio do ssh-agent kroku poniżej
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Validate required secrets
+        run: |
+          set -euo pipefail
+          [ -n "${SSH_HOST:-}" ] || { echo "Missing secret: SSH_HOST"; exit 1; }
+          [ -n "${SSH_USER:-}" ] || { echo "Missing secret: SSH_USER"; exit 1; }
+          # samego klucza nie sprawdzamy tu (jest w następnym kroku)
 
       - name: Setup SSH agent
         uses: webfactory/ssh-agent@v0.9.0
@@ -29,52 +39,55 @@ jobs:
 
       - name: Add host to known_hosts
         run: |
+          set -euo pipefail
           mkdir -p ~/.ssh
-          ssh-keyscan -p "$SSH_PORT" "$SSH_HOST" >> ~/.ssh/known_hosts
+          # Timeout 15s, domyślny port 22 jeśli SSH_PORT pusty
+          ssh-keyscan -T 15 -p "${SSH_PORT:-22}" "${SSH_HOST}" >> ~/.ssh/known_hosts
 
-      # === DIAG: sprawdźmy, czy logowanie po SSH działa ===
       - name: Test SSH connectivity
         run: |
           set -euxo pipefail
-          ssh -p "$SSH_PORT" -o BatchMode=yes "$SSH_USER@$SSH_HOST" "echo 'ssh ok'; whoami; hostname; pwd"
+          ssh -p "${SSH_PORT:-22}" -o BatchMode=yes \
+            "${SSH_USER}@${SSH_HOST}" "echo 'ssh ok'; whoami; hostname; pwd"
 
-      # (opcjonalnie utwórz docelowy katalog i nadaj uprawnienia)
       - name: Ensure /var/www/app exists
         run: |
-          ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" "sudo mkdir -p /var/www/app && sudo chown -R $SSH_USER:$SSH_USER /var/www/app"
+          set -euxo pipefail
+          ssh -p "${SSH_PORT:-22}" "${SSH_USER}@${SSH_HOST}" \
+            "sudo mkdir -p /var/www/app && sudo chown -R ${SSH_USER}:${SSH_USER} /var/www/app"
 
       - name: Rsync project to server
         run: |
           set -euxo pipefail
-          RSYNC_RSH="ssh -p $SSH_PORT -o StrictHostKeyChecking=yes"
+          RSYNC_RSH="ssh -p ${SSH_PORT:-22} -o StrictHostKeyChecking=yes"
           rsync -azv --delete \
             --exclude ".git" \
             --exclude ".github" \
             --exclude "node_modules" \
             -e "$RSYNC_RSH" \
-            ./ "$SSH_USER@$SSH_HOST:/var/www/app"
+            ./ "${SSH_USER}@${SSH_HOST}:/var/www/app"
 
       - name: Upload .env to server (only if ENV_PROD set)
         run: |
           set -euxo pipefail
-          if [ -n "${{ secrets.ENV_PROD }}" ]; then
-            echo "${{ secrets.ENV_PROD }}" > .env
-            scp -P "$SSH_PORT" .env "$SSH_USER@$SSH_HOST:/var/www/app/.env"
+          if [ -n "${ENV_PROD:-}" ]; then
+            echo "${ENV_PROD}" > .env
+            scp -P "${SSH_PORT:-22}" .env "${SSH_USER}@${SSH_HOST}:/var/www/app/.env"
             rm -f .env
           else
             echo "No ENV_PROD secret set, skipping .env upload."
           fi
 
-      # Sprawdźmy czy Docker/Compose są na serwerze
       - name: Check docker on server
         run: |
           set -euxo pipefail
-          ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" "docker --version || true; docker compose version || true"
+          ssh -p "${SSH_PORT:-22}" "${SSH_USER}@${SSH_HOST}" \
+            "docker --version || true; docker compose version || true"
 
       - name: Build & run with Docker Compose
         run: |
           set -euxo pipefail
-          ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" << 'EOF'
+          ssh -p "${SSH_PORT:-22}" "${SSH_USER}@${SSH_HOST}" << 'EOF'
           set -euxo pipefail
           cd /var/www/app
           docker compose pull || true
@@ -83,8 +96,9 @@ jobs:
           docker compose ps
           EOF
 
-      # Na czas diagnozy niech healthcheck NIE wywala całego joba
+      # Na czas diagnozy nie wywalaj całego joba gdy endpoint nie odpowie
       - name: Healthcheck
         continue-on-error: true
         run: |
-          curl -v --max-time 20 http://128.140.109.251:3000/ || (echo "Healthcheck failed (ignored for now)")
+          set -euxo pipefail
+          curl -v --max-time 20 http://128.140.109.251:3000/ || echo "Healthcheck failed (ignored for now)"
