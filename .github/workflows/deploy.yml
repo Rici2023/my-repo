@@ -1,27 +1,70 @@
-name: Deploy Project
+name: Deploy to Hetzner (Docker Compose)
 
 on:
   push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
+    branches: [ "main" ]
+  workflow_dispatch: {}
+
+concurrency:
+  group: deploy-hetzner
+  cancel-in-progress: true
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    
+    timeout-minutes: 30
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-    
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '18'
-    
-    - name: Deploy files
-      run: |
-        echo "Deploying project..."
-        echo "Files in repository:"
-        ls -la
-        echo "Deployment completed!"
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add host to known_hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -p "${{ secrets.SSH_PORT }}" "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Sync project to server
+        run: |
+          RSYNC_RSH="ssh -p ${{ secrets.SSH_PORT }}" \
+          rsync -az --delete \
+            --exclude ".git" \
+            --exclude ".github" \
+            --exclude "node_modules" \
+            ./  ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/var/www/app
+
+      - name: Write .env on server
+        if: ${{ secrets.ENV_PROD != '' }}
+        run: |
+          ssh -p "${{ secrets.SSH_PORT }}" ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
+          "install -d /var/www/app && cat > /var/www/app/.env << 'EOF'
+${{ secrets.ENV_PROD }}
+EOF"
+
+      - name: Build & run with Docker Compose
+        env:
+          COMPOSE_PROJECT_NAME: ${{ secrets.COMPOSE_PROJECT_NAME || 'app' }}
+        run: |
+          ssh -p "${{ secrets.SSH_PORT }}" ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} '
+            set -euo pipefail
+            cd /var/www/app
+            docker compose pull || true
+            docker compose build --no-cache
+            docker compose up -d --remove-orphans
+          '
+
+      # (opcjonalnie) odkomentuj jeśli używasz Prisma/Knex/TypeORM itd.
+      # - name: Run DB migrations
+      #   run: |
+      #     ssh -p "${{ secrets.SSH_PORT }}" ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
+      #     "cd /var/www/app && docker compose exec -T app npx prisma migrate deploy || true"
+
+      - name: Healthcheck
+        # Podmień URL na domenę lub IP:port Twojej aplikacji
+        run: |
+          curl -fsS --max-time 20 http://128.140.109.251:3000/ || (echo "Healthcheck failed" && exit 1)
+
