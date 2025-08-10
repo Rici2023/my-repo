@@ -2,8 +2,8 @@ name: Deploy to Hetzner (Docker Compose)
 
 on:
   push:
-    branches: [ "main" ]
-  workflow_dispatch: {}
+    branches: [ "**" ]   # <— reaguj na każdy branch (w tym "my-repo")
+  workflow_dispatch: {}  # <— przycisk "Run workflow"
 
 concurrency:
   group: deploy-hetzner
@@ -28,7 +28,7 @@ jobs:
           mkdir -p ~/.ssh
           ssh-keyscan -p "${{ secrets.SSH_PORT }}" "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
 
-      - name: Sync project to server
+      - name: Rsync project to server
         run: |
           RSYNC_RSH="ssh -p ${{ secrets.SSH_PORT }}" \
           rsync -az --delete \
@@ -37,14 +37,14 @@ jobs:
             --exclude "node_modules" \
             ./  ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/var/www/app
 
-      - name: Write .env on server (optional)
+      # PROSTY i pewny sposób na .env:
+      # Tworzymy plik .env na runnerze i wysyłamy scp na serwer.
+      - name: Upload .env to server (optional)
         if: ${{ secrets.ENV_PROD != '' }}
         run: |
-          ssh -p "${{ secrets.SSH_PORT }}" ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "
-            install -d /var/www/app && cat > /var/www/app/.env << 'EOF'
-${{ secrets.ENV_PROD }}
-EOF
-          "
+          printf "%s" "${{ secrets.ENV_PROD }}" > .env
+          scp -P "${{ secrets.SSH_PORT }}" .env ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/var/www/app/.env
+          rm -f .env
 
       - name: Build & run with Docker Compose
         run: |
