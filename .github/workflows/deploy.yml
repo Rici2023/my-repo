@@ -2,7 +2,7 @@ name: Deploy to Hetzner (Docker Compose)
 
 on:
   push:
-    branches: [ "**" ]
+    branches: ["**"]
   workflow_dispatch: {}
 
 concurrency:
@@ -13,6 +13,10 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      SSH_HOST: ${{ secrets.SSH_HOST }}
+      SSH_USER: ${{ secrets.SSH_USER }}
+      SSH_PORT: ${{ secrets.SSH_PORT || '22' }}
 
     steps:
       - name: Checkout
@@ -26,22 +30,23 @@ jobs:
       - name: Add host to known_hosts
         run: |
           mkdir -p ~/.ssh
-          ssh-keyscan -p "${{ secrets.SSH_PORT }}" "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
+          ssh-keyscan -p "$SSH_PORT" "$SSH_HOST" >> ~/.ssh/known_hosts
 
       - name: Rsync project to server
         run: |
-          RSYNC_RSH="ssh -p ${{ secrets.SSH_PORT }}" \
+          RSYNC_RSH="ssh -p $SSH_PORT -o StrictHostKeyChecking=yes"
           rsync -az --delete \
             --exclude ".git" \
             --exclude ".github" \
             --exclude "node_modules" \
-            ./  ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/var/www/app
+            -e "$RSYNC_RSH" \
+            ./ "$SSH_USER@$SSH_HOST:/var/www/app"
 
       - name: Upload .env to server (only if ENV_PROD set)
         run: |
           if [ -n "${{ secrets.ENV_PROD }}" ]; then
             echo "${{ secrets.ENV_PROD }}" > .env
-            scp -P "${{ secrets.SSH_PORT }}" .env ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/var/www/app/.env
+            scp -P "$SSH_PORT" .env "$SSH_USER@$SSH_HOST:/var/www/app/.env"
             rm -f .env
           else
             echo "No ENV_PROD secret set, skipping .env upload."
@@ -49,13 +54,13 @@ jobs:
 
       - name: Build & run with Docker Compose
         run: |
-          ssh -p "${{ secrets.SSH_PORT }}" ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} '
-            set -e
-            cd /var/www/app
-            docker compose pull || true
-            docker compose build --no-cache
-            docker compose up -d --remove-orphans
-          '
+          ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" << 'EOF'
+          set -e
+          cd /var/www/app
+          docker compose pull || true
+          docker compose build --no-cache
+          docker compose up -d --remove-orphans
+          EOF
 
       - name: Healthcheck
         run: |
