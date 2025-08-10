@@ -1,1 +1,74 @@
 
+cat > /srv/superkurs/public/index.html <<'HTML'
+<!DOCTYPE html><html lang="pl"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>SuperKurs – Mapa Wiedzy & Zadania</title><style>
+:root{--bg:#f5f7fb;--card:#fff;--text:#111827;--muted:#6b7280;--indigo:#4f46e5;--green:#10b981;--yellow:#fbbf24;--red:#ef4444;--border:#e5e7eb;--chip:#eef2ff}
+*{box-sizing:border-box}html,body{height:100%}body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,'Helvetica Neue',Arial,sans-serif;color:var(--text);background:var(--bg);display:flex}
+.sidebar{width:260px;background:#1f2937;color:#fff;display:flex;flex-direction:column}.brand{padding:18px 20px;border-bottom:1px solid #111827;background:#111827;font-weight:700}.nav{padding:8px}
+.nav button{width:100%;display:flex;align-items:center;gap:10px;padding:12px 14px;background:transparent;border:0;color:#fff;border-radius:10px;cursor:pointer}
+.nav button:hover,.nav button.active{background:#374151}.nav .badge{margin-left:auto;background:#10b981;color:#053;padding:2px 8px;border-radius:999px;font-size:12px}
+.foot{margin-top:auto;padding:10px 14px;color:#9ca3af;font-size:12px;border-top:1px solid #111827}
+.main{flex:1;min-width:0;padding:22px;overflow:auto}.header{display:flex;align-items:center;gap:12px;margin-bottom:18px}.h1{font-size:22px;font-weight:800}
+.toolbar{margin-left:auto;display:flex;gap:10px}.btn{background:var(--indigo);color:#fff;border:0;border-radius:10px;padding:10px 14px;cursor:pointer}.btn.secondary{background:#e5e7eb;color:#111827}
+.grid{display:grid;gap:18px}.grid.cols-2{grid-template-columns:2fr 1fr}.card{background:var(--card);border:1px solid var(--border);border-radius:14px;box-shadow:0 2px 6px rgba(15,23,42,.05)}
+.card .head{padding:14px 16px;border-bottom:1px solid var(--border);font-weight:700}.card .body{padding:16px}.muted{color:var(--muted)}.chips{display:flex;gap:8px;flex-wrap:wrap}
+.chip{background:var(--chip);border:1px solid #dbeafe;padding:6px 10px;border-radius:999px;font-size:12px}.map-wrap{position:relative;height:520px}.legend{display:flex;gap:8px;align-items:center}
+.dot{width:10px;height:10px;border-radius:50%}svg{width:100%;height:100%}.node{cursor:pointer;transition:.15s}.node:hover{filter:brightness(.95)}.node text{font-size:12px;pointer-events:none;fill:#fff}.node circle{stroke:#fff;stroke-width:2}
+.panel p{margin:.3rem 0}.list{margin:0;padding-left:18px}.search{display:flex;gap:10px;margin-bottom:10px}.search input,.search select{flex:1;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:#fff}
+.tabs{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}.tab{padding:8px 12px;border:1px solid var(--border);border-radius:999px;background:#fff;cursor:pointer}.tab.active{background:var(--indigo);border-color:var(--indigo);color:#fff}
+.tasks{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px}.task{display:flex;flex-direction:column}.task .thumb{height:130px;background:#e5e7eb;border-bottom:1px solid var(--border)}
+.task .body{padding:12px;display:flex;flex-direction:column;gap:8px}.badge{display:inline-block;font-size:12px;border-radius:999px;padding:4px 10px}.b-yellow{background:var(--yellow);color:#3a2a00}
+.b-red{background:var(--red);color:#fff}.b-green{background:var(--green);color:#053}.task .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.task input[type="file"]{display:none}
+@media (max-width:980px){.sidebar{width:68px}.brand{font-size:0;line-height:0}.nav button span{display:none}}
+</style></head><body>
+<aside class="sidebar"><div class="brand">🧠 SuperKurs</div><nav class="nav">
+<button data-view="knowledge" class="active">🗺 <span>Mapa Wiedzy</span></button>
+<button data-view="tasks">🛠 <span>Zadania Praktyczne</span> <span class="badge" id="countPending">0</span></button>
+</nav><div class="foot">© SuperKurs</div></aside>
+<main class="main">
+  <div class="header"><div class="h1" id="viewTitle">Mapa Wiedzy</div>
+    <div class="toolbar"><button class="btn secondary" id="resetLS">Wyczyść stan demo</button></div>
+  </div>
+
+  <section id="view-knowledge">
+    <div class="grid cols-2">
+      <div class="card"><div class="head">Graf kompetencji</div>
+        <div class="body">
+          <div class="search"><input id="searchNode" placeholder="Szukaj kompetencji…"/><select id="filterStatus">
+            <option value="ALL">Wszystkie statusy</option><option value="OK">Opanowane</option><option value="WIP">W trakcie</option><option value="GAP">Do nauki</option>
+          </select></div>
+          <div class="map-wrap"><svg id="graph" viewBox="0 0 1000 520" preserveAspectRatio="xMidYMid meet"></svg></div>
+          <div class="legend" style="margin-top:10px"><div class="dot" style="background:#10b981"></div><span class="muted">Opanowane</span>
+            <div class="dot" style="background:#fbbf24;margin-left:12px"></div><span class="muted">W trakcie</span>
+            <div class="dot" style="background:#ef4444;margin-left:12px"></div><span class="muted">Do nauki</span></div>
+        </div>
+      </div>
+      <div class="card panel"><div class="head">Szczegóły kompetencji</div><div class="body" id="panel">
+        <p class="muted">Kliknij w węzeł grafu, aby zobaczyć propozycje lekcji, quizów i powtórek.</p></div></div>
+    </div>
+  </section>
+
+  <section id="view-tasks" style="display:none">
+    <div class="card"><div class="head">Zadania</div>
+      <div class="body"><div class="tabs" id="taskTabs"></div><div class="tasks" id="tasksGrid"></div></div>
+    </div>
+  </section>
+</main>
+
+<script>
+const skills=[{id:'comm-strategy',name:'Strategia komunikacji',status:'OK',x:150,y:140},{id:'audience',name:'Analiza odbiorcy',status:'WIP',x:360,y:90},{id:'storytelling',name:'Storytelling',status:'GAP',x:560,y:180},{id:'active-listen',name:'Słuchanie aktywne',status:'WIP',x:310,y:240},{id:'conflict',name:'Rozwiązywanie konfliktów',status:'GAP',x:760,y:260},{id:'channels',name:'Dobór kanałów',status:'OK',x:520,y:60},{id:'crisis',name:'Komunikacja kryzysowa',status:'GAP',x:620,y:340},{id:'feedback',name:'Feedback 1:1',status:'OK',x:260,y:360}],edges=[['comm-strategy','audience'],['comm-strategy','channels'],['audience','storytelling'],['storytelling','crisis'],['active-listen','feedback'],['conflict','crisis'],['audience','active-listen'],['storytelling','feedback']],TASK_STATES={WIP:'W trakcie',WAIT:'Oczekuje na feedback',DONE:'Zakończone'},demoTasks=[{id:'t1',title:'Przeprowadź rozmowę feedbackową',state:'WIP',comp:'feedback'},{id:'t2',title:'Napisz plan kryzysowy (1 strona)',state:'WAIT',comp:'crisis'},{id:'t3',title:'Analiza grup odbiorców',state:'DONE',comp:'audience'},{id:'t4',title:'Mini-prezentacja storytelling',state:'WIP',comp:'storytelling'}];
+const LS={get:(k,f)=>{try{return JSON.parse(localStorage.getItem(k))??f}catch{return f}},set:(k,v)=>localStorage.setItem(k,JSON.stringify(v))}; if(!LS.get('tasks')) LS.set('tasks',demoTasks);
+const buttons=document.querySelectorAll('.nav button'),title=document.getElementById('viewTitle');buttons.forEach(b=>b.addEventListener('click',()=>{buttons.forEach(x=>x.classList.remove('active'));b.classList.add('active');const v=b.dataset.view;document.getElementById('view-knowledge').style.display=v==='knowledge'?'block':'none';document.getElementById('view-tasks').style.display=v==='tasks'?'block':'none';title.textContent=v==='knowledge'?'Mapa Wiedzy':'Zadania Praktyczne';if(v==='tasks')renderTasks()}));
+const graph=document.getElementById('graph'),panel=document.getElementById('panel'),css=v=>getComputedStyle(document.body).getPropertyValue(v),colorByStatus=s=>s==='OK'?css('--green'):s==='WIP'?css('--yellow'):css('--red');
+function renderGraph(q='',st='ALL'){graph.innerHTML='';edges.forEach(([a,b])=>{const A=skills.find(s=>s.id===a),B=skills.find(s=>s.id===b);if(!A||!B)return;const ln=document.createElementNS('http://www.w3.org/2000/svg','line');ln.setAttribute('x1',A.x);ln.setAttribute('y1',A.y);ln.setAttribute('x2',B.x);ln.setAttribute('y2',B.y);ln.setAttribute('stroke','#d1d5db');ln.setAttribute('stroke-width','2');graph.appendChild(ln)});skills.filter(s=>s.name.toLowerCase().includes(q.toLowerCase())).filter(s=>st==='ALL'||s.status===st).forEach(s=>{const g=document.createElementNS('http://www.w3.org/2000/svg','g');g.classList.add('node');g.setAttribute('transform',`translate(${s.x},${s.y})`);g.addEventListener('click',()=>showSkill(s));const c=document.createElementNS('http://www.w3.org/2000/svg','circle');c.setAttribute('r',32);c.setAttribute('fill',colorByStatus(s.status));const t=document.createElementNS('http://www.w3.org/2000/svg','text');t.setAttribute('text-anchor','middle');t.setAttribute('dy','4');t.textContent='•';g.appendChild(c);g.appendChild(t);const label=document.createElementNS('http://www.w3.org/2000/svg','text');label.setAttribute('text-anchor','middle');label.setAttribute('dy','56');label.setAttribute('fill','#111827');label.textContent=s.name;graph.appendChild(g);graph.appendChild(label)})}
+function showSkill(s){panel.innerHTML=`<div class="chips" style="margin-bottom:10px"><span class="chip">Status: ${s.status==='OK'?'Opanowane':s.status==='WIP'?'W trakcie':'Do nauki'}</span><span class="chip">ID: ${s.id}</span></div><p><strong>${s.name}</strong></p><p class="muted">Proponowane kolejne kroki:</p><ul class="list"><li>Lekcja: „${s.name} – podstawy”</li><li>Quiz sprawdzający</li><li>Zadanie praktyczne powiązane</li></ul><div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn">Rozpocznij lekcję</button><button class="btn secondary" onclick="addPracticeFromSkill('${s.id}','${s.name.replace(/'/g,'’')}')">Dodaj zadanie</button></div>`}
+document.getElementById('searchNode').addEventListener('input',e=>renderGraph(e.target.value,document.getElementById('filterStatus').value));
+document.getElementById('filterStatus').addEventListener('change',e=>renderGraph(document.getElementById('searchNode').value,e.target.value));renderGraph();
+const tabs=[{key:'ALL',label:'Wszystkie'},{key:'WIP',label:'W trakcie'},{key:'WAIT',label:'Oczekuje na feedback'},{key:'DONE',label:'Zakończone'}];
+function renderTasks(active='ALL'){const wrap=document.getElementById('taskTabs');wrap.innerHTML='';tabs.forEach(t=>{const el=document.createElement('button');el.className='tab'+(t.key===active?' active':'');el.textContent=t.label;el.onclick=()=>renderTasks(t.key);wrap.appendChild(el)});const grid=document.getElementById('tasksGrid');grid.innerHTML='';const data=LS.get('tasks',demoTasks).filter(t=>active==='ALL'||t.state===active);document.getElementById('countPending').textContent=LS.get('tasks',demoTasks).filter(t=>t.state!=='DONE').length;data.forEach(t=>{const card=document.createElement('div');card.className='card task';card.innerHTML=`<div class="thumb" role="img" aria-label="Miniatura zadania"></div><div class="body"><div><strong>${t.title}</strong></div><div class="row"><span class="badge ${t.state==='WIP'?'b-yellow':t.state==='WAIT'?'b-red':'b-green'}">${TASK_STATES[t.state]}</span><span class="chip">Kompetencja: ${t.comp}</span></div><div class="row"><label class="btn secondary">➕ Dołącz plik<input type="file" onchange="fakeUpload('${t.id}', this.files[0])"/></label><button class="btn" onclick="markDone('${t.id}')">Oznacz jako ukończone</button><button class="btn secondary" onclick="genAI('${t.id}')">Feedback AI</button></div><div class="muted" id="fb-${t.id}"></div></div>`;grid.appendChild(card)})}
+function saveTasks(list){LS.set('tasks',list)}function markDone(id){const list=LS.get('tasks',demoTasks).map(t=>t.id===id?{...t,state:'DONE'}:t);saveTasks(list);renderTasks(document.querySelector('.tab.active')?.textContent||'ALL')}
+function fakeUpload(id,file){document.getElementById('fb-'+id).textContent=file?`Załączono: ${file.name}`:''}
+function genAI(id){const s=["Świetny kierunek – dodaj 1 przykład i podsumowanie w 3 punktach.","Użyj struktury STAR: sytuacja → działanie → rezultat.","Pisz językiem korzyści – co zyska odbiorca?"];document.getElementById('fb-'+id).textContent="🤖 AI: "+s[Math.floor(Math.random()*s.length)]}
+function addPracticeFromSkill(compId,compName){const list=LS.get('tasks',demoTasks);const nid='t'+Date.now();list.unshift({id:nid,title:`Zadanie: zastosuj "${compName}" w praktyce`,state:'WIP',comp:compId});saveTasks(list);document.querySelector('.nav button[data-view="tasks"]').click()}
+document.getElementById('resetLS').onclick=()=>{localStorage.removeItem('tasks');location.reload()};renderTasks('ALL');
+</script></body></html>
+HTML
