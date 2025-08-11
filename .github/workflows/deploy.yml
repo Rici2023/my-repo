@@ -97,8 +97,7 @@ jobs:
           EOF
 
       # Na czas diagnozy nie wywalaj całego joba gdy endpoint nie odpowie
-      - name: Healthcheck
-        continue-on-error: true
-        run: |
-          set -euxo pipefail
-          curl -v --max-time 20 http://128.140.109.251:3000/ || echo "Healthcheck failed (ignored for now)"
+     - name: Healthcheck
+  run: |
+    curl -v --max-time 20 http://128.140.109.251:8080/ \
+      || (echo "Healthcheck failed (ignored for now)")
