@@ -2,8 +2,9 @@ services:
   web:
     image: nginx:alpine
     ports:
-      - "8080:80"
+      - "80:80"            # było "8080:80"
     volumes:
-      - /var/www/app/public:/usr/share/nginx/html:ro
+      - /srv/superkurs/app/public:/usr/share/nginx/html:ro
     restart: unless-stopped
+
 
