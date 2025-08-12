@@ -1,22 +1,17 @@
-# docker-compose.yml
 services:
   app-web:
+    image: nginx:alpine
     container_name: app-web-1
-    image: app-web:latest          # tag lokalnego obrazu (opcjonalnie, ale wygodnie)
-    build:
-      context: .                   # katalog z Dockerfile
-      dockerfile: Dockerfile
-    pull_policy: never             # nie próbuj pullować z rejestru
     ports:
-      - "127.0.0.1:8081:80"        # tylko loopback -> brak konfliktu z Nginxem
+      - "127.0.0.1:8081:80"        # tylko localhost -> brak konfliktu z Nginxem na hoście
+    volumes:
+      - ./public:/usr/share/nginx/html:ro
+      # (opcjonalnie własny vhost w kontenerze)
+      # - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost/"]  # dostosuj do applki
+      test: ["CMD", "wget", "-qO-", "http://localhost/"]
       interval: 30s
       timeout: 5s
       retries: 5
       start_period: 10s
-    # volumes:
-    #   - ./some/dir:/app:ro       # jeśli potrzebujesz
-    # environment:
-    #   - NODE_ENV=production       # przykładowe zmienne
