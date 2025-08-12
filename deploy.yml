@@ -1,4 +1,4 @@
-name: Build & run with Docker Compose
+name: Deploy to Hetzner (Docker Compose)
 
 on:
   push:
@@ -12,61 +12,107 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Zapobiega BOM/CRLF po stronie runnera (czasem to źródło błędu)
-      - name: Ensure LF line endings (avoid YAML BOM/CRLF)
+      # Normalizacja linii i wymuszenie compose.yaml
+      - name: Normalize line endings & prepare compose.yaml
         run: |
-          sudo apt-get update -y
-          sudo apt-get install -y dos2unix
-          find . -type f \( -name "*.yml" -o -name "*.yaml" -o -name "Dockerfile" -o -name "*.sh" \) -print0 | xargs -0 -r dos2unix
+          sudo apt-get update -y && sudo apt-get install -y dos2unix
+          # Jeśli masz docker-compose.yml, skopiuj do compose.yaml
+          if [ -f docker-compose.yml ]; then cp docker-compose.yml compose.yaml; fi
+          # Usuń BOM/CRLF lokalnie
+          [ -f compose.yaml ] || (echo "compose.yaml missing" && exit 1)
+          sed -i '1s/^\xEF\xBB\xBF//' compose.yaml || true
+          dos2unix -f compose.yaml || true
+
+      # Walidacja lokalna (wyłapie błędy YAML zanim wyślemy na serwer)
+      - name: Validate compose locally
+        run: |
+          docker version
+          docker compose version
+          docker compose -f compose.yaml config >/dev/null
 
       - name: Setup SSH
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
-      - name: Rsync project to server (/var/www/app)
-        run: |
-          ssh -p ${{ secrets.SSH_PORT }} ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "mkdir -p /var/www/app"
-          rsync -az --delete \
-            --exclude ".git" \
-            -e "ssh -p ${{ secrets.SSH_PORT }}" \
-            ./ ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/var/www/app/
-
-      - name: Build & run with Docker Compose
+      # Wysyłka jako tarball + rozpakowanie i URUCHOMIENIE na serwerze
+      - name: Ship & deploy on server
         env:
-          SSH_USER: ${{ secrets.SSH_USER }}
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
         run: |
-          ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" 'bash -seu' <<'EOF'
           set -euo pipefail
-          APP_DIR="/var/www/app"
-          cd "$APP_DIR"
+          # Spakuj repo (bez .git)
+          tar --exclude-vcs -czf app.tgz .
+          # Wyślij
+          scp -P "$SSH_PORT" app.tgz "$SSH_USER@$SSH_HOST:/tmp/app.tgz"
+          # Rozpakuj i odpal
+          ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" 'bash -seuo pipefail' <<'EOF'
+          set -euo pipefail
+          mkdir -p /var/www/app
+          tar xzf /tmp/app.tgz -C /var/www/app
+          rm -f /tmp/app.tgz
+          cd /var/www/app
 
-          echo "==> Compose file info"
-          test -f docker-compose.yml || { echo "ERROR: docker-compose.yml missing in $APP_DIR"; ls -la; exit 1; }
-          # Pokaż pierwsze linie + sprawdź, czy nie ma BOM/CRLF
-          head -n 8 docker-compose.yml || true
-          command -v dos2unix >/dev/null 2>&1 && dos2unix -f docker-compose.yml || true
-          sed -i '1s/^\xEF\xBB\xBF//' docker-compose.yml || true
-          printf "Hex first bytes: "; (command -v xxd >/dev/null && xxd -g 1 -l 16 docker-compose.yml || head -c 16 docker-compose.yml | hexdump -C) || true
+          # Wymuś compose.yaml (jeśli ktoś w repo używa docker-compose.yml)
+          if [ -f docker-compose.yml ] &&
+name: Deploy to Hetzner (Docker Compose)
 
-          # Wybierz właściwą komendę compose (v2 lub v1)
-          if docker compose version >/dev/null 2>&1; then
-            DC="docker compose"
-          elif docker-compose version >/dev/null 2>&1; then
-            DC="docker-compose"
-          else
-            echo "ERROR: Docker Compose not installed"; exit 1
-          fi
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch: {}
 
-          # Walidacja YAML (jeśli coś nie tak, pokaże dokładnie gdzie)
-          $DC config >/dev/null
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-          # Build & run
-          $DC pull || true
-          $DC up -d --build
+      # Normalizacja linii i wymuszenie compose.yaml
+      - name: Normalize line endings & prepare compose.yaml
+        run: |
+          sudo apt-get update -y && sudo apt-get install -y dos2unix
+          # Jeśli masz docker-compose.yml, skopiuj do compose.yaml
+          if [ -f docker-compose.yml ]; then cp docker-compose.yml compose.yaml; fi
+          # Usuń BOM/CRLF lokalnie
+          [ -f compose.yaml ] || (echo "compose.yaml missing" && exit 1)
+          sed -i '1s/^\xEF\xBB\xBF//' compose.yaml || true
+          dos2unix -f compose.yaml || true
 
-          # Sprzątanie (opcjonalnie)
-          docker system prune -f || true
-          EOF
+      # Walidacja lokalna (wyłapie błędy YAML zanim wyślemy na serwer)
+      - name: Validate compose locally
+        run: |
+          docker version
+          docker compose version
+          docker compose -f compose.yaml config >/dev/null
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      # Wysyłka jako tarball + rozpakowanie i URUCHOMIENIE na serwerze
+      - name: Ship & deploy on server
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          set -euo pipefail
+          # Spakuj repo (bez .git)
+          tar --exclude-vcs -czf app.tgz .
+          # Wyślij
+          scp -P "$SSH_PORT" app.tgz "$SSH_USER@$SSH_HOST:/tmp/app.tgz"
+          # Rozpakuj i odpal
+          ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" 'bash -seuo pipefail' <<'EOF'
+          set -euo pipefail
+          mkdir -p /var/www/app
+          tar xzf /tmp/app.tgz -C /var/www/app
+          rm -f /tmp/app.tgz
+          cd /var/www/app
+
+          # Wymuś compose.yaml (jeśli ktoś w repo używa docker-compose.yml)
+          if [ -f docker-compose.yml ] &&
