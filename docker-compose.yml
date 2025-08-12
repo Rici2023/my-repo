@@ -1,6 +1,6 @@
+cat > /var/www/app/docker-compose.yml <<'YML'
+version: "3.9"
 services:
- web:
-    image: nginx
   api:
     build: ./backend
     env_file:
@@ -25,3 +25,6 @@ services:
       - "8080:80"
     depends_on:
       - api
+YML
+
+docker compose config
