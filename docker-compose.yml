@@ -1,14 +1,22 @@
-version: "3.9"
-
+# docker-compose.yml
 services:
   app-web:
-    image: your-image:latest   # <--- podmień na swoją
     container_name: app-web-1
-    # NIE używamy "80:80" ani "8080:80"!
+    image: app-web:latest          # tag lokalnego obrazu (opcjonalnie, ale wygodnie)
+    build:
+      context: .                   # katalog z Dockerfile
+      dockerfile: Dockerfile
+    pull_policy: never             # nie próbuj pullować z rejestru
     ports:
-      - "127.0.0.1:8081:80"    # tylko loopback -> host
+      - "127.0.0.1:8081:80"        # tylko loopback -> brak konfliktu z Nginxem
     restart: unless-stopped
-    # environment:             # (opcjonalnie)
-    #   - NODE_ENV=production
-    # volumes:                 # (opcjonalnie)
-    #   - ./app:/usr/share/nginx/html:ro
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost/"]  # dostosuj do applki
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    # volumes:
+    #   - ./some/dir:/app:ro       # jeśli potrzebujesz
+    # environment:
+    #   - NODE_ENV=production       # przykładowe zmienne
