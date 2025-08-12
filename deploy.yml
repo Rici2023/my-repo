@@ -1,4 +1,4 @@
-name: Deploy to Hetzner (Docker Compose)
+name: Build & run with Docker Compose
 
 on:
   push:
@@ -12,32 +12,35 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Zapobiega problemom typu BOM/CRLF w YAML/Dockerfile
+      - name: Ensure LF line endings (avoid YAML BOM/CRLF)
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y dos2unix
+          find . -type f \( -name "*.yml" -o -name "*.yaml" -o -name "Dockerfile" -o -name "*.sh" \) -print0 | xargs -0 -r dos2unix
+
       - name: Setup SSH
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
-      - name: Copy files to server
+      - name: Rsync project to server (/var/www/app)
         run: |
-          rsync -az --delete --exclude ".git" \
-            -e "ssh -p ${{ secrets.SSH_PORT }} -o StrictHostKeyChecking=no" \
-            ./ ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:~/dashboard-pro/
+          rsync -az --delete \
+            --exclude ".git" \
+            -e "ssh -p ${{ secrets.SSH_PORT }}" \
+            ./ ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/var/www/app/
 
-      - name: Deploy via SSH
-        timeout-minutes: 15
+      - name: Build & run with Docker Compose
+        env:
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
         run: |
-          ssh -o ConnectTimeout=10 -p ${{ secrets.SSH_PORT }} \
-            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
-          set -euxo pipefail
-          cd ~/dashboard-pro
-          docker compose pull
-          docker compose down --timeout 30
-          docker compose up -d --build
-          docker system prune -f --filter "until=24h"
-          EOF
+          ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" 'bash -s' <<'EOF'
+          set -euo pipefail
+          APP_DIR="/var/www/app"
+          cd "$APP_DIR"
 
-      - name: Verify deployment
-        run: |
-          ssh -p ${{ secrets.SSH_PORT }} ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "
-            docker ps --format 'table {{.Names}}\t{{.Status}}' | grep dashboard-pro
-          "
+          echo "==> Using docker-compose.yml from: $APP_DIR"
+          test -f
