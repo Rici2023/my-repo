@@ -1,5 +1,4 @@
-cd /var/www/app
-sudo tee compose.yaml > /dev/null <<'YML'
+cat > compose.yaml <<'YML'
 version: "3.9"
 services:
   api:
@@ -27,6 +26,3 @@ services:
     depends_on:
       - api
 YML
-
-docker compose -f compose.yaml config
-docker compose -f compose.yaml up -d --build
