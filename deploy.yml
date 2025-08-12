@@ -56,63 +56,25 @@ jobs:
           cd /var/www/app
 
           # Wymuś compose.yaml (jeśli ktoś w repo używa docker-compose.yml)
-          if [ -f docker-compose.yml ] &&
-name: Deploy to Hetzner (Docker Compose)
+          if [ -f docker-compose.yml ] && [ ! -f compose.yaml ]; then cp docker-compose.yml compose.yaml; fi
 
-on:
-  push:
-    branches: ["main"]
-  workflow_dispatch: {}
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      # Normalizacja linii i wymuszenie compose.yaml
-      - name: Normalize line endings & prepare compose.yaml
-        run: |
-          sudo apt-get update -y && sudo apt-get install -y dos2unix
-          # Jeśli masz docker-compose.yml, skopiuj do compose.yaml
-          if [ -f docker-compose.yml ]; then cp docker-compose.yml compose.yaml; fi
-          # Usuń BOM/CRLF lokalnie
-          [ -f compose.yaml ] || (echo "compose.yaml missing" && exit 1)
+          # Usuń BOM i CRLF na serwerze
           sed -i '1s/^\xEF\xBB\xBF//' compose.yaml || true
-          dos2unix -f compose.yaml || true
+          tr -d '\r' < compose.yaml > compose.yaml.tmp && mv compose.yaml.tmp compose.yaml
 
-      # Walidacja lokalna (wyłapie błędy YAML zanim wyślemy na serwer)
-      - name: Validate compose locally
-        run: |
-          docker version
-          docker compose version
-          docker compose -f compose.yaml config >/dev/null
+          echo "---- compose.yaml (head) ----"
+          head -n 8 compose.yaml || true
+          echo "-----------------------------"
 
-      - name: Setup SSH
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+          # Wybierz compose v2 lub v1
+          if docker compose version >/dev/null 2>&1; then DC="docker compose"; else DC="docker-compose"; fi
 
-      # Wysyłka jako tarball + rozpakowanie i URUCHOMIENIE na serwerze
-      - name: Ship & deploy on server
-        env:
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_PORT: ${{ secrets.SSH_PORT }}
-          SSH_USER: ${{ secrets.SSH_USER }}
-        run: |
-          set -euo pipefail
-          # Spakuj repo (bez .git)
-          tar --exclude-vcs -czf app.tgz .
-          # Wyślij
-          scp -P "$SSH_PORT" app.tgz "$SSH_USER@$SSH_HOST:/tmp/app.tgz"
-          # Rozpakuj i odpal
-          ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" 'bash -seuo pipefail' <<'EOF'
-          set -euo pipefail
-          mkdir -p /var/www/app
-          tar xzf /tmp/app.tgz -C /var/www/app
-          rm -f /tmp/app.tgz
-          cd /var/www/app
+          # Walidacja YAML (tu się wyłoży, jeśli nadal jest problem)
+          $DC -f compose.yaml config >/dev/null
 
-          # Wymuś compose.yaml (jeśli ktoś w repo używa docker-compose.yml)
-          if [ -f docker-compose.yml ] &&
+          # Deploy
+          $DC -f compose.yaml pull || true
+          $DC -f compose.yaml up -d --build
+
+          docker system prune -f || true
+          EOF
