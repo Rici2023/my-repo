@@ -1,524 +1,718 @@
-<!doctype html>
-<html lang="pl">
+<!DOCTYPE html>
+<html lang="pl" class="h-full">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Superinteligentny Kurs – Dashboard (MVP)</title>
+  <title>Dashboard Pro — Uniwersalna Platforma SaaS</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://unpkg.com/lucide@latest"></script>
+  <!-- jsPDF (PDF export) -->
+  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.4/jspdf.plugin.autotable.min.js"></script>
   <style>
-    :root{
-      --bg:#0b0c10; --surface:#121318; --card:#151821; --text:#e6e7ee; --muted:#8b8fa1;
-      --brand:#6ee7b7; --brand-2:#60a5fa; --border:rgba(255,255,255,.08); --shadow:0 6px 20px rgba(0,0,0,.35);
-      --ok:#34d399; --warn:#fbbf24; --danger:#fb7185; --radius:14px; --font: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Inter, "Helvetica Neue", Arial;
-    }
-    [data-theme="light"]{ --bg:#f7f7fb; --surface:#fff; --card:#fff; --text:#0c1324; --muted:#525a71; --border:rgba(16,24,40,.12); --shadow:0 10px 24px rgba(16,24,40,.06); }
-    html,body{height:100%}
-    body{margin:0;background:var(--bg);color:var(--text);font:15px/1.6 var(--font)}
-    *{box-sizing:border-box}
-
-    .app{display:grid; grid-template-columns:260px 1fr; min-height:100vh}
-    @media (max-width:980px){ .app{grid-template-columns:1fr} .sidebar{position:fixed; inset:0 auto 0 0; width:84vw; max-width:320px; transform:translateX(-102%); transition:.25s ease; z-index:60} .sidebar.open{transform:none} }
-
-    .sidebar{background:linear-gradient(180deg, var(--surface), #0f1116 65%); border-right:1px solid var(--border)}
-    .sidebar .logo{display:flex; align-items:center; gap:.6rem; padding:1rem 1.2rem; border-bottom:1px solid var(--border)}
-    .sidebar .logo .dot{width:12px;height:12px;border-radius:50%; background:linear-gradient(135deg,var(--brand),var(--brand-2)); box-shadow:0 0 0 4px rgba(110,231,183,.15)}
-    .nav{padding:.75rem}
-    .nav a{display:flex; align-items:center; gap:.6rem; padding:.75rem .9rem; margin:.25rem 0; border-radius:12px; color:var(--text); text-decoration:none; border:1px solid transparent}
-    .nav a:hover{background:rgba(255,255,255,.04); border-color:var(--border)}
-    .nav a.active{background:linear-gradient(180deg, rgba(96,165,250,.15), rgba(110,231,183,.12)); border-color:rgba(110,231,183,.35)}
-
-    .content{display:grid; grid-template-rows:auto 1fr}
-    header{position:sticky; top:0; z-index:50; backdrop-filter:saturate(150%) blur(14px); background:color-mix(in srgb, var(--bg) 86%, transparent); border-bottom:1px solid var(--border)}
-    .bar{display:flex; align-items:center; gap:.6rem; padding:.9rem 1rem}
-    .btn{display:inline-flex; align-items:center; gap:.5rem; padding:.55rem .85rem; border-radius:12px; border:1px solid var(--border); background:var(--surface); color:var(--text); cursor:pointer; box-shadow:var(--shadow)}
-    .btn.ghost{background:transparent; box-shadow:none}
-    .btn.icon{padding:.45rem .55rem}
-    .pill{font-size:.82rem; padding:.18rem .55rem; border:1px solid var(--border); border-radius:999px; color:var(--muted)}
-    .muted{color:var(--muted)}
-    .search{flex:1; display:flex; align-items:center; gap:.6rem; background:var(--card); border:1px solid var(--border); padding:.5rem .85rem; border-radius:14px}
-    .search input{flex:1; border:0; outline:0; background:transparent; color:var(--text)}
-
-    main{padding:1.25rem; display:grid; gap:1.25rem}
-    .toolbar{display:flex; gap:.6rem; flex-wrap:wrap}
-    .grid{display:grid; gap:1.1rem}
-    .grid.cols-4{grid-template-columns: repeat(4, minmax(0,1fr))}
-    .grid.cols-3{grid-template-columns: repeat(3, minmax(0,1fr))}
-    .split{display:grid; grid-template-columns: 1fr 360px; gap:1.1rem}
-    @media (max-width:1200px){ .grid.cols-4{grid-template-columns: repeat(2,1fr)} .grid.cols-3{grid-template-columns:1fr} .split{grid-template-columns:1fr} }
-
-    .card{background:var(--card); border:1px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow)}
-    .card .hd{display:flex; align-items:center; justify-content:space-between; padding:1rem 1.1rem; border-bottom:1px solid var(--border)}
-    .card .bd{padding:1.1rem}
-    .kpi{display:flex; align-items:center; gap:1rem}
-    .kpi .num{font-size:2.1rem; font-weight:800}
-    .trend{font-size:.9rem; padding:.25rem .55rem; border-radius:999px; border:1px solid var(--border)}
-    .trend.up{color:var(--ok); background:rgba(52,211,153,.1)}
-    .trend.down{color:var(--danger); background:rgba(251,113,133,.1)}
-
-    table{width:100%; border-collapse:collapse; font-size:.96rem}
-    th,td{padding:.8rem .7rem; text-align:left}
-    thead th{background:var(--surface); border-bottom:1px solid var(--border)}
-    tbody tr{border-bottom:1px dashed var(--border)}
-    tbody tr:hover{background:rgba(255,255,255,.03)}
-
-    .spark{width:100%; height:56px}
-    footer{padding:1.2rem; color:var(--muted)}
-    .toast{position:fixed; right:16px; bottom:16px; padding:.8rem 1rem; border-radius:12px; background:var(--surface); border:1px solid var(--border); box-shadow:var(--shadow); display:none}
-    .skip{position:absolute; left:-9999px}
-    .skip:focus{left:8px; top:8px; background:#000; color:#fff; padding:.4rem .6rem; border-radius:8px; z-index:99}
-
-    /* Drawer: Mentor AI */
-    .drawer{position:fixed; inset:0; display:none; z-index:70}
-    .drawer.open{display:block}
-    .drawer .backdrop{position:absolute; inset:0; background:rgba(0,0,0,.5)}
-    .drawer .panel{position:absolute; right:0; top:0; bottom:0; width:420px; max-width:92vw; background:var(--surface); border-left:1px solid var(--border); box-shadow:var(--shadow); display:flex; flex-direction:column}
-    .chat{flex:1; overflow:auto; padding:1rem}
-    .msg{max-width:84%; padding:.75rem .95rem; margin:.45rem 0; border-radius:14px; border:1px solid var(--border); line-height:1.5}
-    .msg.ai{background:rgba(96,165,250,.08)}
-    .msg.me{background:rgba(110,231,183,.09); margin-left:auto}
-    .composer{display:flex; gap:.5rem; padding:.9rem; border-top:1px solid var(--border)}
-    .composer input{flex:1; border:1px solid var(--border); border-radius:12px; padding:.65rem .85rem; background:var(--card); color:var(--text)}
-    .chips{display:flex; gap:.4rem; flex-wrap:wrap; padding:0 1rem .6rem}
-    .chip{font-size:.9rem; padding:.4rem .7rem; border:1px solid var(--border); border-radius:999px; background:var(--card); cursor:pointer}
-
-    /* Modals */
-    .modal{position:fixed; inset:0; display:none; z-index:75}
-    .modal.open{display:block}
-    .modal .backdrop{position:absolute; inset:0; background:rgba(0,0,0,.55)}
-    .modal .dialog{position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); width:860px; max-width:94vw; background:var(--surface); border:1px solid var(--border); border-radius:14px; box-shadow:var(--shadow)}
-    .dialog .hd{display:flex; align-items:center; justify-content:space-between; padding:1rem 1.2rem; border-bottom:1px solid var(--border)}
-    .dialog .bd{padding:1rem 1.2rem; display:grid; gap:.9rem}
-    .dialog .ft{display:flex; justify-content:flex-end; gap:.6rem; padding:1rem 1.2rem; border-top:1px solid var(--border)}
-    .form-row{display:grid; grid-template-columns: 240px 1fr; gap:.7rem; align-items:center}
-    .form-row input,.form-row select{width:100%; padding:.6rem .75rem; border-radius:12px; border:1px solid var(--border); background:var(--card); color:var(--text)}
-
-    /* Progress bar */
-    .progress{height:10px; background:rgba(255,255,255,.06); border-radius:999px; overflow:hidden}
-    .progress>span{display:block; height:100%; background:linear-gradient(90deg,var(--brand),var(--brand-2))}
-
-    /* Utilities */
-    .space-y > * + *{margin-top:.6rem}
+    /* Fallback if Tailwind hasn't loaded */
+    body{background:#0b1020;color:#e6edf3}
+    .glass{backdrop-filter: blur(10px); background: rgba(255,255,255,0.04);}
+    .card{border:1px solid rgba(255,255,255,0.06)}
+    .scrollbar-thin::-webkit-scrollbar{height:6px;width:6px}
+    .scrollbar-thin::-webkit-scrollbar-thumb{background:#2a3350;border-radius:10px}
+    .tag{border:1px solid rgba(255,255,255,.08)}
   </style>
 </head>
-<body data-theme="dark">
-<a class="skip" href="#main">Pomiń nawigację</a>
-<div class="app" id="app">
-  <aside class="sidebar" id="sidebar" aria-label="Nawigacja boczna">
-    <div class="logo"><div class="dot" aria-hidden="true"></div><strong id="brandTitle">Superinteligentny Kurs</strong></div>
-    <nav class="nav">
-      <a href="#" class="active" id="navOverview">📊 Przegląd</a>
-      <a href="#" id="navCourses">🎓 Kursy</a>
-      <a href="#" id="navAgents">🤖 Agenci</a>
-      <a href="#" id="navWorkflows">🔧 Workflows</a>
-      <a href="#" id="navBlueprints">🧩 Blueprinty</a>
-      <a href="#" id="navKPI">📈 KPI</a>
-      <a href="#" id="navAB">🧪 A/B</a>
-      <a href="#" id="navBilling">💳 Płatności</a>
-      <a href="#" id="navUsers">👤 Użytkownicy</a>
-      <a href="#" id="navAPI">🧰 API & Integracje</a>
-      <a href="#" id="navHelp">❓ Pomoc</a>
-      <a href="#" id="navSettings">⚙️ Ustawienia</a>
-    </nav>
-  </aside>
+<body class="min-h-full bg-slate-950 text-slate-100">
+  <!-- Top Bar -->
+  <header class="sticky top-0 z-40 w-full border-b border-white/10 bg-slate-950/70 backdrop-blur">
+    <div class="mx-auto max-w-7xl px-4 py-3 flex items-center gap-3">
+      <div class="flex items-center gap-2">
+        <span class="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-400">
+          <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
+        </span>
+        <h1 class="text-lg font-semibold tracking-tight">Uniwersalna Platforma SaaS — Dashboard Pro</h1>
+      </div>
+      <div class="ml-auto flex items-center gap-3">
+        <!-- Tenant selector -->
+        <label class="sr-only" for="tenantSelect">Organizacja / Tenant</label>
+        <select id="tenantSelect" class="rounded-xl bg-slate-900/70 border border-white/10 px-3 py-2 text-sm">
+          <option value="acme">ACME Manufacturing (id: tnt_acme) — schema: acme</option>
+          <option value="globex">Globex Retail (id: tnt_globex) — schema: globex</option>
+          <option value="omnifood">OmniFood EDU (id: tnt_omnifood) — schema: omnifood</option>
+          <option value="megastore">MegaStore (id: tnt_mega) — schema: mega — SHARDED</option>
+        </select>
+        <!-- Role selector -->
+        <label class="sr-only" for="roleSelect">Rola</label>
+        <select id="roleSelect" class="rounded-xl bg-slate-900/70 border border-white/10 px-3 py-2 text-sm">
+          <option value="admin">Admin</option>
+          <option value="user">User</option>
+        </select>
+        <button id="openDocs" class="rounded-xl bg-slate-900/70 border border-white/10 px-3 py-2 text-sm hover:bg-slate-800">Dokumentacja</button>
+      </div>
+    </div>
+  </header>
 
-  <div class="content">
-    <header>
-      <div class="bar">
-        <button class="btn icon" id="menuBtn" aria-label="Otwórz menu">☰</button>
-        <div class="search" role="search">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M10.5 18a7.5 7.5 0 1 1 5.303-12.803A7.5 7.5 0 0 1 10.5 18Zm8.25 2.25L16 17.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
-          <input id="search" placeholder="Szukaj… ( / )" aria-label="Szukaj w dashboardzie" />
+  <main class="mx-auto max-w-7xl px-4 py-6 space-y-6">
+    <!-- KPI Cards -->
+    <section aria-labelledby="kpi-heading" class="space-y-3">
+      <div class="flex items-center gap-2">
+        <i data-lucide="activity" class="w-4 h-4 text-emerald-400"></i>
+        <h2 id="kpi-heading" class="text-sm uppercase tracking-wider text-slate-400">KPI — kliknij, aby zobaczyć mini‑drilldown</h2>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
+        <!-- Each card is clickable for drilldown -->
+        <button class="group card rounded-2xl glass p-4 text-left focus:outline-none focus:ring-2 focus:ring-emerald-500" data-kpi="mrr">
+          <div class="text-slate-400 text-xs">MRR</div>
+          <div class="mt-1 flex items-baseline gap-2">
+            <div class="text-2xl font-semibold">$124,380</div>
+            <span class="text-emerald-400 text-xs">+4.8%</span>
+          </div>
+          <div class="mt-2 h-8" aria-hidden="true">{SVG}</div>
+        </button>
+        <button class="group card rounded-2xl glass p-4 text-left" data-kpi="tenants">
+          <div class="text-slate-400 text-xs">Aktywne Organizacje</div>
+          <div class="mt-1 flex items-baseline gap-2">
+            <div class="text-2xl font-semibold">1,142</div>
+            <span class="text-emerald-400 text-xs">+2.1%</span>
+          </div>
+          <div class="mt-2 h-8" aria-hidden="true">{SVG}</div>
+        </button>
+        <button class="group card rounded-2xl glass p-4 text-left" data-kpi="aiSpend">
+          <div class="text-slate-400 text-xs">AI Spend (dzisiaj)</div>
+          <div class="mt-1 flex items-baseline gap-2">
+            <div class="text-2xl font-semibold">$612</div>
+            <span class="text-amber-300 text-xs">+1.3%</span>
+          </div>
+          <div class="mt-2 h-8" aria-hidden="true">{SVG}</div>
+        </button>
+        <button class="group card rounded-2xl glass p-4 text-left" data-kpi="errorRate">
+          <div class="text-slate-400 text-xs">Error Rate</div>
+          <div class="mt-1 flex items-baseline gap-2">
+            <div class="text-2xl font-semibold">0.42%</div>
+            <span class="text-emerald-400 text-xs">−0.2%</span>
+          </div>
+          <div class="mt-2 h-8" aria-hidden="true">{SVG}</div>
+        </button>
+        <button class="group card rounded-2xl glass p-4 text-left" data-kpi="events">
+          <div class="text-slate-400 text-xs">Events / min (Bus)</div>
+          <div class="mt-1 flex items-baseline gap-2">
+            <div class="text-2xl font-semibold">8,732</div>
+            <span class="text-emerald-400 text-xs">+6.0%</span>
+          </div>
+          <div class="mt-2 h-8" aria-hidden="true">{SVG}</div>
+        </button>
+        <button class="group card rounded-2xl glass p-4 text-left" data-kpi="uptime">
+          <div class="text-slate-400 text-xs">Agent Uptime</div>
+          <div class="mt-1 flex items-baseline gap-2">
+            <div class="text-2xl font-semibold">99.92%</div>
+            <span class="text-emerald-400 text-xs">SLO 99.9%</span>
+          </div>
+          <div class="mt-2 h-8" aria-hidden="true">{SVG}</div>
+        </button>
+      </div>
+    </section>
+
+    <!-- Health mini-panel -->
+    <section aria-labelledby="health-heading" class="space-y-3">
+      <div class="flex items-center gap-2">
+        <i data-lucide="heart-pulse" class="w-4 h-4 text-rose-300"></i>
+        <h2 id="health-heading" class="text-sm uppercase tracking-wider text-slate-400">Health — agenci</h2>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+        <!-- Agent cards -->
+        <div class="card rounded-2xl glass p-4">
+          <div class="flex items-center justify-between">
+            <div class="font-medium">Content Generator</div>
+            <span class="tag rounded-lg text-xs px-2 py-0.5 text-emerald-300">OK</span>
+          </div>
+          <div class="mt-2 text-sm text-slate-400">Uptime: <span class="text-slate-100">99.95%</span> • Errors: 12/d</div>
+          <div class="mt-2 h-1.5 w-full rounded-full bg-slate-800">
+            <div class="h-1.5 rounded-full bg-emerald-500" style="width: 96%"></div>
+          </div>
         </div>
-        <div class="btn ghost" id="blueprintBtn">🧩 <span id="blueprintLabel">E-commerce: Beauty</span></div>
-        <div class="btn ghost" id="langBtn">🌐 <span id="langLabel">PL</span></div>
-        <div class="btn ghost" id="rangeWrap">⏱️ <select id="rangeSel"><option value="7">7 dni</option><option value="30" selected>30 dni</option><option value="90">90 dni</option></select> <label style="margin-left:.4rem"><input type="checkbox" id="compareTgl"/> Porównaj</label></div>
-        <button class="btn" id="mentorBtn">🤖 Mentor AI</button>
-        <button class="btn" id="notifBtn">🔔 Powiadomienia</button>
-        <button class="btn" id="themeBtn" aria-pressed="false">🌙 / ☀️</button>
-        <button class="btn" id="saveBtn">💾 Zapisz</button>
+        <div class="card rounded-2xl glass p-4">
+          <div class="flex items-center justify-between">
+            <div class="font-medium">Grader / Feedback</div>
+            <span class="tag rounded-lg text-xs px-2 py-0.5 text-amber-300">WARN</span>
+          </div>
+          <div class="mt-2 text-sm text-slate-400">Uptime: <span class="text-slate-100">99.2%</span> • Queue: 183</div>
+          <div class="mt-2 h-1.5 w-full rounded-full bg-slate-800">
+            <div class="h-1.5 rounded-full bg-amber-400" style="width: 70%"></div>
+          </div>
+        </div>
+        <div class="card rounded-2xl glass p-4">
+          <div class="flex items-center justify-between">
+            <div class="font-medium">Workflow Orchestrator</div>
+            <span class="tag rounded-lg text-xs px-2 py-0.5 text-emerald-300">OK</span>
+          </div>
+          <div class="mt-2 text-sm text-slate-400">Uptime: <span class="text-slate-100">99.9%</span> • Latency P95: 420ms</div>
+          <div class="mt-2 h-1.5 w-full rounded-full bg-slate-800">
+            <div class="h-1.5 rounded-full bg-emerald-500" style="width: 92%"></div>
+          </div>
+        </div>
+        <div class="card rounded-2xl glass p-4">
+          <div class="flex items-center justify-between">
+            <div class="font-medium">CDM / Integrations</div>
+            <span class="tag rounded-lg text-xs px-2 py-0.5 text-emerald-300">OK</span>
+          </div>
+          <div class="mt-2 text-sm text-slate-400">Throughput: <span class="text-slate-100">8.7k/min</span> • Errors: 0.5%</div>
+          <div class="mt-2 h-1.5 w-full rounded-full bg-slate-800">
+            <div class="h-1.5 rounded-full bg-emerald-500" style="width: 88%"></div>
+          </div>
+        </div>
       </div>
-    </header>
+    </section>
 
-    <main id="main">
-      <!-- KPI top row -->
-      <div class="grid cols-4" id="kpis">
-        <div class="card"><div class="bd kpi"><div><div class="num" id="kpi1">2,4%</div><small id="kpi1Label">CR PDP</small></div><span class="trend up" id="kpi1Trend">+0,3 pp</span></div></div>
-        <div class="card"><div class="bd kpi"><div><div class="num" id="kpi2">189 zł</div><small id="kpi2Label">AOV</small></div><span class="trend up" id="kpi2Trend">+4,1%</span></div></div>
-        <div class="card"><div class="bd kpi"><div><div class="num" id="kpi3">12,8%</div><small id="kpi3Label">Odzysk koszyków</small></div><span class="trend up" id="kpi3Trend">+1,7 pp</span></div></div>
-        <div class="card"><div class="bd kpi"><div><div class="num" id="kpi4">7,9</div><small id="kpi4Label">CSAT</small></div><span class="trend up" id="kpi4Trend">+0,2</span></div></div>
+    <!-- Admin panels: RBAC, Monitoring, Multi-Tenancy, AI Layer, Integrations, Blueprints -->
+    <section aria-labelledby="admin-heading" class="space-y-6 admin-only">
+      <div class="flex items-center gap-2">
+        <i data-lucide="shield" class="w-4 h-4 text-sky-300"></i>
+        <h2 id="admin-heading" class="text-sm uppercase tracking-wider text-slate-400">Panele administracyjne</h2>
       </div>
 
-      <div class="split">
-        <!-- Trends chart -->
-        <section class="card" aria-labelledby="chartHd">
-          <div class="hd"><strong id="chartHd">Trend kluczowych metryk</strong>
-            <div class="toolbar">
-              <select id="metricSelect" class="btn" aria-label="Wybierz metrykę">
-                <option value="cr">CR PDP</option>
-                <option value="aov">AOV</option>
-                <option value="recovery">Odzysk koszyków</option>
-                <option value="hours">Zaoszczędzone godziny</option>
-              </select>
-              <span class="pill" id="comparePill" style="display:none">vs poprzednie 30 dni: <b>+12%</b></span>
+      <!-- RBAC -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div class="card rounded-2xl glass p-4">
+          <div class="flex items-center justify-between mb-2">
+            <div class="font-semibold">RBAC — Role Dynamiczne</div>
+            <span class="text-xs text-slate-400">Owner/Coach/Learner + Custom</span>
+          </div>
+          <div class="flex items-end gap-2">
+            <div class="flex-1">
+              <label class="text-xs text-slate-400">Nazwa roli</label>
+              <input id="newRoleName" class="w-full rounded-xl bg-slate-900/60 border border-white/10 px-3 py-2 text-sm" placeholder="np. Store Manager"/>
+            </div>
+            <button id="addRoleBtn" class="rounded-xl bg-emerald-600 px-3 py-2 text-sm hover:bg-emerald-500">Dodaj rolę</button>
+          </div>
+          <ul id="roleList" class="mt-3 space-y-2 text-sm"></ul>
+          <p class="mt-2 text-xs text-slate-400">Hooki blueprintów mogą rozszerzać uprawnienia bez modyfikacji rdzenia.</p>
+        </div>
+
+        <!-- Monitoring & Logging -->
+        <div class="card rounded-2xl glass p-4">
+          <div class="flex items-center justify-between mb-2">
+            <div class="font-semibold">Monitoring & Logging</div>
+            <span class="text-xs text-slate-400">Sentry • ELK • Prometheus</span>
+          </div>
+          <div class="grid grid-cols-2 gap-3 text-sm">
+            <div>
+              <div class="text-xs text-slate-400 mb-1">Błędy (24h)</div>
+              <div class="text-2xl font-semibold">183</div>
+              <div class="text-xs text-emerald-400">−12% vs 24h</div>
+            </div>
+            <div>
+              <div class="text-xs text-slate-400 mb-1">Latency P95</div>
+              <div class="text-2xl font-semibold">420ms</div>
+              <div class="text-xs text-amber-300">+40ms</div>
             </div>
           </div>
-          <div class="bd">
-            <svg class="spark" id="spark" viewBox="0 0 300 56" preserveAspectRatio="none" role="img" aria-label="Wykres trendu"><path id="sparkPath" d="" fill="none" stroke="url(#g)" stroke-width="2"/></svg>
-            <svg width="0" height="0" aria-hidden="true"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="var(--brand)"/><stop offset="100%" stop-color="var(--brand-2)"/></linearGradient></defs></svg>
+          <div class="mt-3 h-28 overflow-auto rounded-xl bg-slate-900/50 p-2 text-xs leading-6">
+            <div>[12:01:22] WARN  grader queue=183 delay=2.1s</div>
+            <div>[12:03:11] ERROR cdn-bus topic=order.created retried=1</div>
+            <div>[12:05:44] INFO  sentry heartbeat ok</div>
+            <div>[12:07:08] INFO  prom scrape /metrics 200</div>
+            <div>[12:09:27] ERROR connector.shopify v1.8.2 rate_limit</div>
           </div>
-        </section>
-
-        <!-- Next steps -->
-        <aside class="card" aria-labelledby="todoHd">
-          <div class="hd"><strong id="todoHd">Następne kroki</strong><span class="pill" id="aiSuggestTag">AI-sugestie</span></div>
-          <div class="bd">
-            <ul id="todo" style="margin:0; padding-left:1.1rem; display:grid; gap:.8rem">
-              <li>Włącz test A/B tekstu hero na PDP (3 warianty)</li>
-              <li>Dodaj UGC do TOP 10 SKU</li>
-              <li>Uruchom sekwencję odzyskania koszyka (D+0/D+1/D+3)</li>
-            </ul>
-            <div style="margin-top:1rem; display:flex; gap:.6rem; flex-wrap:wrap">
-              <button class="btn" id="newTestBtn">➕ Nowy test</button>
-              <button class="btn ghost" id="integrationOpen">🔌 Podłącz integrację</button>
-              <button class="btn ghost" id="billingOpen">💳 Zarządzaj subskrypcją</button>
-            </div>
-          </div>
-        </aside>
+        </div>
       </div>
 
-      <!-- Second row: Agents / A-B / GA Optimizer -->
-      <section class="grid cols-3">
-        <div class="card" aria-labelledby="agentsHd">
-          <div class="hd"><strong id="agentsHd">Status agentów</strong><span class="pill" id="agentCount">8 aktywnych</span></div>
-          <div class="bd" id="agents"></div>
+      <!-- Multi-Tenancy & Cost Controls -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div class="card rounded-2xl glass p-4">
+          <div class="flex items-center justify-between mb-2">
+            <div class="font-semibold">Multi‑Tenancy Isolation</div>
+            <span class="text-xs text-slate-400">Schemas • Namespaces • Sharding</span>
+          </div>
+          <div class="text-sm text-slate-300">Bieżący tenant: <span id="mtTenant" class="font-semibold">ACME</span></div>
+          <div class="mt-2 grid grid-cols-2 gap-3 text-sm">
+            <div class="rounded-xl bg-slate-900/50 p-3">
+              <div class="text-xs text-slate-400">Schema</div>
+              <div id="mtSchema" class="font-medium">acme</div>
+            </div>
+            <div class="rounded-xl bg-slate-900/50 p-3">
+              <div class="text-xs text-slate-400">Namespace</div>
+              <div id="mtNs" class="font-medium">ns-acme</div>
+            </div>
+          </div>
+          <div class="mt-3 flex items-center gap-2">
+            <input id="autoShard" type="checkbox" class="rounded border-white/10 bg-slate-900/60"/>
+            <label for="autoShard" class="text-sm">Automatyczny sharding dużych tenantów</label>
+          </div>
         </div>
-
-        <div class="card" aria-labelledby="abHd">
-          <div class="hd"><strong id="abHd">Eksperymenty A/B</strong><span class="pill" id="abActiveTag">aktywne</span></div>
-          <div class="bd space-y">
-            <div style="display:flex; align-items:center; justify-content:space-between">
-              <div>
-                <strong>PDP – Benefit Stack</strong>
-                <div class="muted" style="font-size:.9rem">v3 vs v5 · n<sub>A</sub>=<span id="nA">3 420</span> · n<sub>B</sub>=<span id="nB">3 380</span></div>
+        <div class="card rounded-2xl glass p-4">
+          <div class="flex items-center justify-between mb-2">
+            <div class="font-semibold">Budżety AI</div>
+            <span class="text-xs text-slate-400">Dynamiczna alokacja</span>
+          </div>
+          <div class="space-y-3">
+            <div>
+              <div class="flex items-center justify-between text-xs text-slate-400"><span>Dzienny limit $</span><span id="aiBudgetLabel">$1,200 / $1,500</span></div>
+              <div class="mt-1 h-2 w-full rounded-full bg-slate-800">
+                <div id="aiBudgetBar" class="h-2 rounded-full bg-emerald-500" style="width: 80%"></div>
               </div>
-              <button class="btn ghost" id="pauseAb">⏸️ Wstrzymaj</button>
             </div>
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:.9rem">
-              <div class="card" style="padding:.8rem"><div id="variantALabel">Wariant A</div><div id="abA" style="font-weight:800; font-size:1.5rem">2,58%</div></div>
-              <div class="card" style="padding:.8rem"><div id="variantBLabel">Wariant B</div><div id="abB" style="font-weight:800; font-size:1.5rem">2,35%</div></div>
+            <div class="flex items-center gap-2">
+              <input id="dynAlloc" type="checkbox" class="rounded border-white/10 bg-slate-900/60" checked />
+              <label for="dynAlloc" class="text-sm">Włącz auto‑skalowanie zużycia wg ruchu</label>
             </div>
-            <div style="display:flex; gap:.6rem; align-items:center; flex-wrap:wrap">
-              <span class="pill">Istotność: <b id="sig">86%</b></span>
-              <span class="pill">ETA decyzji: <b id="eta">2 dni</b></span>
-              <span class="pill">Metoda: z-test (przybliż.)</span>
-            </div>
-            <small id="lastXdays" class="muted">CR PDP, ostatnie <span id="rangeLabel">30</span> dni</small>
           </div>
         </div>
+      </div>
 
-        <section class="card" aria-labelledby="gaqHd">
-          <div class="hd"><strong id="gaqHd">Approval Queue – GA Optimizer</strong><button class="btn ghost" id="applyAllBtn">✅ Zastosuj wszystko</button></div>
-          <div class="bd" id="gaQueue"><div class="pill">Brak oczekujących propozycji</div></div>
-        </section>
-      </section>
+      <!-- AI Layer: Feedback + Guardrails -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div class="card rounded-2xl glass p-4">
+          <div class="flex items-center justify-between mb-2">
+            <div class="font-semibold">Feedback Loop dla AI</div>
+            <span class="text-xs text-slate-400">Oceny → poprawa promptów</span>
+          </div>
+          <div class="space-y-3 text-sm">
+            <div class="rounded-xl bg-slate-900/50 p-3">
+              <div class="flex items-center justify-between">
+                <div class="font-medium">"Stwórz plan lekcji o feedbacku 360°"</div>
+                <div class="flex items-center gap-3">
+                  <button class="thumb" data-score="up">👍 <span class="count">12</span></button>
+                  <button class="thumb" data-score="down">👎 <span class="count">2</span></button>
+                </div>
+              </div>
+              <div class="mt-1 text-xs text-slate-400">model: gpt-5 • wersja promptu: v3.2</div>
+            </div>
+            <div class="rounded-xl bg-slate-900/50 p-3">
+              <div class="flex items-center justify-between">
+                <div class="font-medium">"Przeanalizuj koszyk porzuceń (E‑commerce)"</div>
+                <div class="flex items-center gap-3">
+                  <button class="thumb" data-score="up">👍 <span class="count">8</span></button>
+                  <button class="thumb" data-score="down">👎 <span class="count">5</span></button>
+                </div>
+              </div>
+              <div class="mt-1 text-xs text-slate-400">model: o4-mini • wersja promptu: v1.9</div>
+            </div>
+            <p class="text-xs text-slate-400">Zebrane oceny karmią retriever i automatycznie proponują ulepszenia promptów w PR‑kach.</p>
+          </div>
+        </div>
+        <div class="card rounded-2xl glass p-4">
+          <div class="flex items-center justify-between mb-2">
+            <div class="font-semibold">Guardrails / Ethical AI</div>
+            <span class="text-xs text-slate-400">Bias • Hallucinations • Safety</span>
+          </div>
+          <div class="space-y-3 text-sm">
+            <label class="flex items-center gap-2"><input type="checkbox" class="rounded border-white/10 bg-slate-900/60" checked /> Filtry bezpieczeństwa treści</label>
+            <label class="flex items-center gap-2"><input type="checkbox" class="rounded border-white/10 bg-slate-900/60" checked /> Detekcja halucynacji (confidence score)</label>
+            <label class="flex items-center gap-2"><input type="checkbox" class="rounded border-white/10 bg-slate-900/60" checked /> Kontrola bias (audit trails)</label>
+            <p class="text-xs text-slate-400">Integracje z Guardrails AI / HF safeguards (konfigurowalne per blueprint).</p>
+          </div>
+        </div>
+      </div>
 
-      <!-- Third row: Finance / Compliance / Activity -->
-      <section class="grid cols-3">
-        <div class="card" aria-labelledby="finHd">
-          <div class="hd"><strong id="finHd">Raporty finansowe</strong><span class="pill">MRR / Churn</span></div>
-          <div class="bd space-y">
-            <div class="grid cols-3">
-              <div class="card" style="padding:.9rem"><div>Przychody (<span id="revRange">30</span>d)</div><div class="num" id="rev30">$24,3k</div><div class="muted">vs poprzedni: <b id="revDelta">+12%</b></div></div>
-              <div class="card" style="padding:.9rem"><div>MRR</div><div class="num" id="mrr">$18,7k</div><div class="muted">vs poprzedni: <b id="mrrDelta">+7%</b></div></div>
-              <div class="card" style="padding:.9rem"><div>Churn (logo)</div><div class="num" id="churn">2,9%</div><div class="muted">vs poprzedni: <b id="churnDelta">−0,2 pp</b></div></div>
+      <!-- Integrations: Event Bus, Adapters, CDM -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div class="card rounded-2xl glass p-4">
+          <div class="flex items-center justify-between mb-2">
+            <div class="font-semibold">Event Bus</div>
+            <span class="text-xs text-slate-400">Kafka / EventBridge</span>
+          </div>
+          <div class="grid grid-cols-2 gap-3 text-sm">
+            <div>
+              <div class="text-xs text-slate-400">Throughput</div>
+              <div class="text-xl font-semibold">8.7k/min</div>
             </div>
             <div>
-              <table>
-                <thead><tr><th>Data</th><th>Plan</th><th>Kwota</th><th>Status</th></tr></thead>
-                <tbody id="finTable"></tbody>
-              </table>
+              <div class="text-xs text-slate-400">Lag P95</div>
+              <div class="text-xl font-semibold">340ms</div>
+            </div>
+          </div>
+          <div class="mt-3 text-xs text-slate-400">Subskrypcje:</div>
+          <ul class="mt-1 text-sm list-disc pl-5">
+            <li>order.created → Agent: Upsell</li>
+            <li>lesson.completed → Grader/Badges</li>
+            <li>invoice.paid → Finance/Analytics</li>
+          </ul>
+        </div>
+        <div class="card rounded-2xl glass p-4">
+          <div class="flex items-center justify-between mb-2">
+            <div class="font-semibold">Adaptery — wersjonowanie</div>
+            <span class="text-xs text-slate-400">semver • compat tests</span>
+          </div>
+          <table id="adaptersTable" class="w-full text-sm">
+            <thead class="text-xs text-slate-400">
+              <tr class="text-left">
+                <th class="py-1">Konektor</th>
+                <th class="py-1">Wersja</th>
+                <th class="py-1">Kompatybilność</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="border-t border-white/5">
+                <td class="py-1">Shopify</td><td>1.8.2</td><td><span class="tag rounded-lg px-2 py-0.5 text-xs text-emerald-300">OK</span></td>
+              </tr>
+              <tr class="border-t border-white/5">
+                <td class="py-1">M365</td><td>2.3.0</td><td><span class="tag rounded-lg px-2 py-0.5 text-xs text-emerald-300">OK</span></td>
+              </tr>
+              <tr class="border-t border-white/5">
+                <td class="py-1">Stripe</td><td>1.4.1</td><td><span class="tag rounded-lg px-2 py-0.5 text-xs text-amber-300">WARN</span></td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="mt-2 flex gap-2">
+            <button class="btn small" data-export="adaptersTable" data-type="csv">CSV</button>
+            <button class="btn small" data-export="adaptersTable" data-type="pdf">PDF</button>
+          </div>
+        </div>
+        <div class="card rounded-2xl glass p-4">
+          <div class="flex items-center justify-between mb-2">
+            <div class="font-semibold">CDM — model hierarchiczny</div>
+            <span class="text-xs text-slate-400">Graph‑like</span>
+          </div>
+          <div class="text-sm">
+            <div class="font-medium">Order</div>
+            <ul class="list-disc pl-6 text-slate-300">
+              <li>Items → <span class="text-slate-400">ProductRef, qty, price</span></li>
+              <li>Customer → <span class="text-slate-400">id, email, org</span></li>
+              <li>Payments → <span class="text-slate-400">StripeIntent, status</span></li>
+            </ul>
+            <div class="mt-2 font-medium">Lesson</div>
+            <ul class="list-disc pl-6 text-slate-300">
+              <li>Attempts → <span class="text-slate-400">score, time</span></li>
+              <li>Attendee → <span class="text-slate-400">userRef, cohort</span></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- Blueprints: manifest + marketplace + validation -->
+      <div class="card rounded-2xl glass p-4">
+        <div class="flex items-center justify-between mb-2">
+          <div class="font-semibold">Blueprints — paczki & monetyzacja</div>
+          <span class="text-xs text-slate-400">manifest • testy • marketplace</span>
+        </div>
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-3 text-sm">
+          <div class="rounded-xl bg-slate-900/50 p-3">
+            <div class="font-medium">Leadership Pro</div>
+            <div class="text-xs text-slate-400">pkg: bp-leadership@1.0.3</div>
+            <div class="mt-1 flex items-center gap-2">
+              <span class="tag rounded-lg px-2 py-0.5 text-xs text-emerald-300">Valid</span>
+              <span class="tag rounded-lg px-2 py-0.5 text-xs">Price: $49/mo</span>
+            </div>
+          </div>
+          <div class="rounded-xl bg-slate-900/50 p-3">
+            <div class="font-medium">E‑commerce AI</div>
+            <div class="text-xs text-slate-400">pkg: bp-store@2.1.0</div>
+            <div class="mt-1 flex items-center gap-2">
+              <span class="tag rounded-lg px-2 py-0.5 text-xs text-emerald-300">Valid</span>
+              <span class="tag rounded-lg px-2 py-0.5 text-xs">Price: $99/mo</span>
+            </div>
+          </div>
+          <div class="rounded-xl bg-slate-900/50 p-3">
+            <div class="font-medium">M365 Copilot EDU</div>
+            <div class="text-xs text-slate-400">pkg: bp-m365@0.9.7</div>
+            <div class="mt-1 flex items-center gap-2">
+              <span class="tag rounded-lg px-2 py-0.5 text-xs text-amber-300">WARN</span>
+              <span class="tag rounded-lg px-2 py-0.5 text-xs">Price: $39/mo</span>
             </div>
           </div>
         </div>
+        <p class="mt-2 text-xs text-slate-400">Manifest (JSON/YAML) deklaruje konektory, mapowania do CDM, workflowy, komponenty UI. Walidacja w CI/CD.</p>
+      </div>
+    </section>
 
-        <div class="card" aria-labelledby="compHd">
-          <div class="hd"><strong id="compHd">Compliance</strong><span class="pill">RODO/GDPR/PCI</span></div>
-          <div class="bd space-y">
-            <div>
-              <div class="muted" style="margin-bottom:.35rem">Postęp wdrożenia</div>
-              <div class="progress" aria-label="Postęp zgodności"><span id="compProgress" style="width:72%"></span></div>
-              <small class="muted">72% ukończone</small>
-            </div>
-            <div class="space-y">
-              <label><input type="checkbox" checked/> Rejestr czynności (ROPA) <a href="#" class="btn ghost">Uzupełnij</a></label>
-              <label><input type="checkbox" checked/> Umowy powierzenia (DPA) <a href="#" class="btn ghost">Pobierz</a></label>
-              <label><input type="checkbox" checked/> Pseudonimizacja telemetry</label>
-              <label><input type="checkbox"/> PCI DSS (karty przez Stripe/PayU) <a href="#" class="btn ghost">Wytyczne</a></label>
-              <label><input type="checkbox" checked/> DSAR (eksport/usunięcie) <a href="#" class="btn ghost">Panel</a></label>
+    <!-- Finance & Activities with export & search -->
+    <section aria-labelledby="data-heading" class="space-y-4">
+      <div class="flex items-center gap-2">
+        <i data-lucide="table" class="w-4 h-4 text-violet-300"></i>
+        <h2 id="data-heading" class="text-sm uppercase tracking-wider text-slate-400">Dane operacyjne</h2>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <!-- Finance -->
+        <div class="card rounded-2xl glass p-4">
+          <div class="flex items-center justify-between mb-2">
+            <div class="font-semibold">Finanse</div>
+            <div class="flex items-center gap-2">
+              <button class="btn" data-export="financeTable" data-type="csv">Eksport CSV</button>
+              <button class="btn" data-export="financeTable" data-type="pdf">Eksport PDF</button>
             </div>
           </div>
-        </div>
-
-        <div class="card" aria-labelledby="activityHd">
-          <div class="hd"><strong id="activityHd">Ostatnie aktywności</strong>
-            <div class="toolbar"><select id="filterSelect" class="btn" aria-label="Filtruj"><option value="all" id="optAll">Wszystko</option><option value="agent" id="optAgent">Agenci</option><option value="workflow" id="optWorkflow">Workflows</option></select>
-            <button class="btn ghost" id="loadMore">Załaduj więcej</button></div>
+          <div class="mb-2 flex items-center gap-2">
+            <i data-lucide="search" class="w-4 h-4 text-slate-400"></i>
+            <input id="financeSearch" placeholder="Szukaj…" class="flex-1 rounded-xl bg-slate-900/60 border border-white/10 px-3 py-2 text-sm"/>
           </div>
-          <div class="bd" style="padding:0">
-            <table aria-label="Tabela aktywności">
-              <thead><tr><th id="thType">Typ</th><th id="thDesc">Opis</th><th id="thResult">Wynik</th><th id="thTime">Czas</th></tr></thead>
-              <tbody id="activityBody"></tbody>
+          <div class="overflow-auto scrollbar-thin">
+            <table id="financeTable" class="w-full text-sm">
+              <thead class="text-xs text-slate-400">
+                <tr class="text-left">
+                  <th class="py-1">Data</th>
+                  <th class="py-1">Tenant</th>
+                  <th class="py-1">Plan</th>
+                  <th class="py-1">MRR</th>
+                  <th class="py-1">AI Tokens</th>
+                  <th class="py-1">AI Cost</th>
+                  <th class="py-1">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr class="border-t border-white/5"><td>2025-08-01</td><td>ACME</td><td>Pro</td><td>$1,200</td><td>1.2M</td><td>$36.2</td><td><span class="tag rounded-lg px-2 py-0.5 text-xs text-emerald-300">Paid</span></td></tr>
+                <tr class="border-t border-white/5"><td>2025-08-02</td><td>Globex</td><td>Pro</td><td>$900</td><td>980k</td><td>$29.1</td><td><span class="tag rounded-lg px-2 py-0.5 text-xs text-emerald-300">Paid</span></td></tr>
+                <tr class="border-t border-white/5"><td>2025-08-03</td><td>OmniFood</td><td>Starter</td><td>$450</td><td>220k</td><td>$6.8</td><td><span class="tag rounded-lg px-2 py-0.5 text-xs text-amber-300">Pending</span></td></tr>
+                <tr class="border-t border-white/5"><td>2025-08-03</td><td>MegaStore</td><td>Enterprise</td><td>$12,500</td><td>12.4M</td><td>$372.0</td><td><span class="tag rounded-lg px-2 py-0.5 text-xs text-emerald-300">Paid</span></td></tr>
+              </tbody>
             </table>
           </div>
         </div>
-      </section>
 
-      <!-- Fourth row: Users & Roles / API & Integrations / Help Center -->
-      <section class="grid cols-3">
-        <div class="card" aria-labelledby="usersHd">
-          <div class="hd"><strong id="usersHd">Użytkownicy i role</strong><button class="btn ghost" id="authOpen">🔐 Logowanie/Rejestracja</button></div>
-          <div class="bd">
-            <table>
-              <thead><tr><th>Użytkownik</th><th>Rola</th><th>2FA</th><th>Ostatnie logowanie</th><th>Akcje</th></tr></thead>
-              <tbody id="usersTable"></tbody>
+        <!-- Activities -->
+        <div class="card rounded-2xl glass p-4">
+          <div class="flex items-center justify-between mb-2">
+            <div class="font-semibold">Aktywności (Eventy)</div>
+            <div class="flex items-center gap-2">
+              <button class="btn" data-export="activityTable" data-type="csv">Eksport CSV</button>
+              <button class="btn" data-export="activityTable" data-type="pdf">Eksport PDF</button>
+            </div>
+          </div>
+          <div class="mb-2 flex items-center gap-2">
+            <i data-lucide="search" class="w-4 h-4 text-slate-400"></i>
+            <input id="activitySearch" placeholder="Szukaj…" class="flex-1 rounded-xl bg-slate-900/60 border border-white/10 px-3 py-2 text-sm"/>
+          </div>
+          <div class="overflow-auto scrollbar-thin">
+            <table id="activityTable" class="w-full text-sm">
+              <thead class="text-xs text-slate-400">
+                <tr class="text-left">
+                  <th class="py-1">Czas</th>
+                  <th class="py-1">Tenant</th>
+                  <th class="py-1">Zdarzenie</th>
+                  <th class="py-1">Aktor</th>
+                  <th class="py-1">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr class="border-t border-white/5"><td>12:01:22</td><td>ACME</td><td>lesson.completed</td><td>user:123</td><td><span class="tag rounded-lg px-2 py-0.5 text-xs text-emerald-300">OK</span></td></tr>
+                <tr class="border-t border-white/5"><td>12:02:41</td><td>Globex</td><td>order.created</td><td>agent:upsell</td><td><span class="tag rounded-lg px-2 py-0.5 text-xs text-emerald-300">OK</span></td></tr>
+                <tr class="border-t border-white/5"><td>12:03:11</td><td>MegaStore</td><td>invoice.paid</td><td>stripe</td><td><span class="tag rounded-lg px-2 py-0.5 text-xs text-amber-300">WARN</span></td></tr>
+                <tr class="border-t border-white/5"><td>12:05:44</td><td>OmniFood</td><td>grader.scored</td><td>agent:grader</td><td><span class="tag rounded-lg px-2 py-0.5 text-xs text-emerald-300">OK</span></td></tr>
+              </tbody>
             </table>
           </div>
         </div>
+      </div>
+    </section>
+  </main>
 
-        <div class="card" aria-labelledby="apiHd">
-          <div class="hd"><strong id="apiHd">API & Integracje</strong><button class="btn ghost" id="apiOpen">🔑 Klucze API</button></div>
-          <div class="bd space-y">
-            <div style="display:flex; gap:.5rem; flex-wrap:wrap">
-              <span class="pill">Zapier</span><span class="pill">Make</span><span class="pill">Slack</span><span class="pill">CRM</span><span class="pill">Google Workspace</span>
-            </div>
-            <div><button class="btn" id="integrationOpen2">🔌 Dodaj integrację</button></div>
-            <div>
-              <strong>Twoje klucze</strong>
-              <table style="margin-top:.5rem"><thead><tr><th>Klucz</th><th>Zakres</th><th>Ostatnie użycie</th><th>Akcje</th></tr></thead><tbody id="keysTable"></tbody></table>
-            </div>
-          </div>
+  <!-- Drilldown Modal -->
+  <div id="drilldown" class="fixed inset-0 z-50 hidden items-center justify-center">
+    <div class="absolute inset-0 bg-black/60"></div>
+    <div class="relative w-[92vw] max-w-3xl rounded-2xl glass card p-5">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <i data-lucide="bar-chart-3" class="w-4 h-4 text-emerald-400"></i>
+          <h3 id="drillTitle" class="text-lg font-semibold">Drilldown</h3>
         </div>
-
-        <div class="card" aria-labelledby="helpHd">
-          <div class="hd"><strong id="helpHd">Centrum pomocy (FAQ)</strong><span class="pill">Dokumentacja</span></div>
-          <div class="bd">
-            <details><summary>Jak zacząć? (Onboarding)</summary><p>Podłącz sklep i e-mail, uruchom recovery, wygeneruj PDP dla TOP SKU.</p></details>
-            <details><summary>Rozliczenia i faktury</summary><p>Faktury znajdziesz w zakładce Płatności → Historia. Zmiana planu działa natychmiast (prorata).</p></details>
-            <details><summary>RODO i prywatność</summary><p>Masz panel DSAR (eksport/usunięcie). Telemetria jest pseudonimizowana.</p></details>
-          </div>
+        <button id="closeDrill" class="rounded-xl border border-white/10 px-2 py-1 text-sm hover:bg-slate-800">Zamknij</button>
+      </div>
+      <div id="drillBody" class="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+        <div class="rounded-xl bg-slate-900/50 p-3">
+          <div class="text-xs text-slate-400">Segmenty (Top)</div>
+          <ul id="drillSegments" class="mt-1 space-y-2"></ul>
         </div>
-      </section>
-
-      <footer>© <span id="year"></span> <span id="brandFooter">Superinteligentny Kurs</span>. <span style="color:var(--muted)" id="uiVersion">Wersja UI: 0.3.0</span></footer>
-    </main>
-  </div>
-</div>
-
-<div class="toast" id="toast" role="status" aria-live="polite">Zapisano ustawienia</div>
-
-<!-- Drawer: Mentor AI -->
-<div class="drawer" id="mentorDrawer" aria-hidden="true" role="dialog" aria-label="Mentor AI">
-  <div class="backdrop" id="mentorBackdrop"></div>
-  <aside class="panel">
-    <div class="hd"><strong id="mentorTitle" style="padding-left:1rem">Mentor AI</strong><div style="margin-left:auto; padding-right:1rem"><button class="btn ghost" id="mentorClose" aria-label="Zamknij">✖</button></div></div>
-    <div class="chips" id="mentorChips"><button class="chip" data-q="Jak podnieść CR PDP o 10%?">Jak podnieść CR PDP o 10%?</button><button class="chip" data-q="3 szybkie wygrane">3 szybkie wygrane</button><button class="chip" data-q="Czy treści PDP są zgodne z polityką Beauty?">Zgodność PDP</button></div>
-    <div class="chat" id="chat"><div class="msg ai">Cześć! Jestem Twoim mentorem AI. Zapytaj o priorytety, KPI lub poproś o wygenerowanie playbooka.</div></div>
-    <div class="composer"><input id="msgInput" placeholder="Zadaj pytanie… Enter aby wysłać" /><button class="btn" id="sendBtn">Wyślij</button></div>
-  </aside>
-</div>
-
-<!-- Modal: Integrations -->
-<div class="modal" id="intModal" role="dialog" aria-modal="true" aria-labelledby="intTitle">
-  <div class="backdrop" id="intBackdrop"></div>
-  <div class="dialog">
-    <div class="hd"><strong id="intTitle">Podłącz integrację</strong><button class="btn ghost" id="intClose">✖</button></div>
-    <div class="bd">
-      <div class="form-row"><label for="intType" id="lblType">Typ integracji</label><select id="intType"><option value="shopify">Shopify</option><option value="woocommerce">WooCommerce</option><option value="klaviyo">Klaviyo</option><option value="meta">Meta Ads</option><option value="googleads">Google Ads</option><option value="gorgias">Gorgias</option><option value="yotpo">Yotpo</option><option value="ga4">Google Analytics 4</option><option value="slack">Slack</option><option value="zapier">Zapier</option><option value="make">Make</option></select></div>
-      <div class="form-row"><label for="shopDomain" id="lblDomain">Domena / ID</label><input id="shopDomain" placeholder="np. moja-nazwa.myshopify.com" /></div>
-      <div class="form-row"><label for="apiKey" id="lblApiKey">API Key / Token</label><input id="apiKey" placeholder="wklej klucz API" /></div>
-      <div class="form-row"><label for="apiSecret" id="lblApiSecret">API Secret (jeśli wymagane)</label><input id="apiSecret" placeholder="wklej sekret (opcjonalnie)" /></div>
-      <div style="display:flex; gap:.6rem; flex-wrap:wrap"><button class="btn" id="oauthBtn">🔐 OAuth</button><button class="btn" id="testBtn">🧪 Przetestuj połączenie</button><span id="testStatus" class="pill" aria-live="polite"></span></div>
-    </div>
-    <div class="ft"><button class="btn ghost" id="intCancel">Anuluj</button><button class="btn" id="intSave">Zapisz</button></div>
-  </div>
-</div>
-
-<!-- Modal: Billing / Subscriptions -->
-<div class="modal" id="billModal" role="dialog" aria-modal="true" aria-labelledby="billTitle">
-  <div class="backdrop" id="billBackdrop"></div>
-  <div class="dialog">
-    <div class="hd"><strong id="billTitle">Zarządzaj subskrypcją</strong><button class="btn ghost" id="billClose">✖</button></div>
-    <div class="bd">
-      <div class="form-row"><label>Plan</label><select id="planSel"><option value="starter_m">Starter – miesięczny ($49)</option><option value="starter_y">Starter – roczny ($490)</option><option value="growth_m">Growth – miesięczny ($99)</option><option value="growth_y">Growth – roczny ($990)</option><option value="pro_m">Pro – miesięczny ($199)</option><option value="pro_y">Pro – roczny ($1,990)</option></select></div>
-      <div class="form-row"><label>Trial</label><select id="trialSel"><option>Brak</option><option>7 dni</option><option>14 dni</option></select></div>
-      <div class="form-row"><label>Bramka płatności</label><select id="gateSel"><option>Stripe</option><option>PayPal</option><option>Przelewy24</option><option>PayU</option></select></div>
-      <div class="form-row"><label>Status</label><div><span class="pill" id="subStatus">Aktywna</span> <button class="btn ghost" id="cancelPlan">Anuluj</button> <button class="btn" id="changePlan">Zmień plan</button></div></div>
-      <div>
-        <strong>Historia faktur</strong>
-        <table style="margin-top:.5rem"><thead><tr><th>Data</th><th>Nr</th><th>Kwota</th><th>Status</th><th>Faktura</th></tr></thead><tbody id="invTable"></tbody></table>
+        <div class="rounded-xl bg-slate-900/50 p-3">
+          <div class="text-xs text-slate-400">Trend (7 dni)</div>
+          <svg id="drillTrend" class="w-full h-40"></svg>
+        </div>
       </div>
     </div>
-    <div class="ft"><button class="btn ghost" id="billCancel">Zamknij</button></div>
   </div>
-</div>
 
-<!-- Modal: Auth (Login/SSO) -->
-<div class="modal" id="authModal" role="dialog" aria-modal="true" aria-labelledby="authTitle">
-  <div class="backdrop" id="authBackdrop"></div>
-  <div class="dialog">
-    <div class="hd"><strong id="authTitle">Logowanie / Rejestracja</strong><button class="btn ghost" id="authClose">✖</button></div>
-    <div class="bd">
-      <div class="form-row"><label>Email</label><input placeholder="you@example.com"/></div>
-      <div class="form-row"><label>Hasło</label><input type="password" placeholder="••••••••"/></div>
-      <div style="display:flex; gap:.6rem; flex-wrap:wrap"><button class="btn">Zaloguj</button><button class="btn ghost">Zarejestruj</button></div>
-      <div style="margin-top:.6rem; display:grid; gap:.5rem"><button class="btn" style="justify-content:flex-start">🔵 Zaloguj przez Google</button><button class="btn" style="justify-content:flex-start">🔷 Zaloguj przez LinkedIn</button><button class="btn" style="justify-content:flex-start">🔵 Zaloguj przez Facebook</button></div>
-    </div>
-    <div class="ft"><button class="btn ghost" id="authCancel">Zamknij</button></div>
-  </div>
-</div>
+  <!-- Reusable button styles -->
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      // Icon render
+      if (window.lucide) lucide.createIcons();
 
-<!-- Modal: API Keys -->
-<div class="modal" id="apiModal" role="dialog" aria-modal="true" aria-labelledby="apiTitle">
-  <div class="backdrop" id="apiBackdrop"></div>
-  <div class="dialog">
-    <div class="hd"><strong id="apiTitle">Klucze API & Dokumentacja</strong><button class="btn ghost" id="apiClose">✖</button></div>
-    <div class="bd">
-      <div class="form-row"><label>Nowy klucz</label><button class="btn" id="genKey">Generuj</button></div>
-      <div class="form-row"><label>Twoje klucze</label><div id="keysBox"><span class="pill">sk_test_***123</span></div></div>
-      <div class="form-row"><label>Dokumentacja</label><div><a href="#" class="btn ghost">📘 OpenAPI (wkrótce)</a> <a href="#" class="btn ghost">🧩 SDK (Node/Python)</a></div></div>
-    </div>
-    <div class="ft"><button class="btn ghost" id="apiCancel">Zamknij</button></div>
-  </div>
-</div>
+      // Role-based UI
+      const roleSelect = document.getElementById('roleSelect');
+      const adminSections = document.querySelectorAll('.admin-only');
+      function applyRole() {
+        const r = roleSelect.value;
+        adminSections.forEach(el => {
+          el.style.display = r === 'admin' ? '' : 'none';
+        });
+      }
+      roleSelect.addEventListener('change', applyRole);
+      applyRole();
 
-<!-- Modal: Notifications settings -->
-<div class="modal" id="notifModal" role="dialog" aria-modal="true" aria-labelledby="notifTitle">
-  <div class="backdrop" id="notifBackdrop"></div>
-  <div class="dialog">
-    <div class="hd"><strong id="notifTitle">Powiadomienia</strong><button class="btn ghost" id="notifClose">✖</button></div>
-    <div class="bd">
-      <label><input type="checkbox" checked/> E-mail: potwierdzenia płatności</label>
-      <label><input type="checkbox" checked/> E-mail: przypomnienia o odnowieniu</label>
-      <label><input type="checkbox"/> In-app: komunikaty o zmianach</label>
-      <label><input type="checkbox"/> Web push</label>
-      <div class="form-row"><label>Integracja Support</label><select id="supportSel"><option>Brak</option><option>LiveChat</option><option>Zendesk</option></select></div>
-    </div>
-    <div class="ft"><button class="btn ghost" id="notifCancel">Zamknij</button></div>
-  </div>
-</div>
+      // Tenant → Multi-tenancy panel
+      const tenantSelect = document.getElementById('tenantSelect');
+      const mtTenant = document.getElementById('mtTenant');
+      const mtSchema = document.getElementById('mtSchema');
+      const mtNs = document.getElementById('mtNs');
+      const autoShard = document.getElementById('autoShard');
+      function applyTenant() {
+        const v = tenantSelect.value;
+        const map = {
+          acme: {name:'ACME', schema:'acme', ns:'ns-acme', sharded:false},
+          globex: {name:'Globex', schema:'globex', ns:'ns-globex', sharded:false},
+          omnifood: {name:'OmniFood', schema:'omnifood', ns:'ns-omnifood', sharded:false},
+          megastore: {name:'MegaStore', schema:'mega', ns:'ns-mega', sharded:true},
+        }
+        const t = map[v];
+        if (!t) return;
+        mtTenant.textContent = t.name;
+        mtSchema.textContent = t.schema;
+        mtNs.textContent = t.ns;
+        autoShard.checked = t.sharded;
+      }
+      tenantSelect.addEventListener('change', applyTenant);
+      applyTenant();
 
-<script>
-(function(){
-  const $ = (s,p=document)=>p.querySelector(s); const $$=(s,p=document)=>[...p.querySelectorAll(s)];
-  const state = { blueprint:'ecom-beauty', lang:'pl', range:30, compare:false };
+      // KPI drilldown
+      const drill = document.getElementById('drilldown');
+      const drillTitle = document.getElementById('drillTitle');
+      const drillSegments = document.getElementById('drillSegments');
+      const drillTrend = document.getElementById('drillTrend');
+      document.querySelectorAll('[data-kpi]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const k = btn.getAttribute('data-kpi');
+          openDrill(k);
+        });
+      });
+      document.getElementById('closeDrill').addEventListener('click', closeDrill);
+      drill.addEventListener('click', (e) => { if (e.target === drill) closeDrill(); });
 
-  // Helpers (PL formatting)
-  const fmtPct = (x, d=2)=> (x.toFixed(d)).replace('.', ',') + '%';
-  const fmtMoney = v => '$'+ v.toString().replace('.', ',');
-  const fmtPP = x => (x>0?'+':'') + (x.toFixed(1)).replace('.', ',') + ' pp';
+      function openDrill(key){
+        const config = {
+          mrr: {title:'MRR', seg:[['Enterprise',65210],['Pro',41720],['Starter',17350]], data:[112,118,114,121,126,129,134]},
+          tenants: {title:'Aktywne Organizacje', seg:[['EDU',412],['Retail',388],['Manufacturing',342]], data:[1012,1031,1055,1080,1104,1123,1142]},
+          aiSpend: {title:'AI Spend (dzisiaj)', seg:[['Leadership',212],['E‑commerce',308],['M365',92]], data:[480,505,522,540,566,590,612]},
+          errorRate: {title:'Error Rate', seg:[['Adapters',0.7],['Agents',0.5],['Workflow',0.4]], data:[0.62,0.58,0.54,0.51,0.49,0.45,0.42]},
+          events: {title:'Events / min', seg:[['order.created',3820],['lesson.completed',2940],['invoice.paid',1972]], data:[7310,7550,7740,7960,8120,8290,8732]},
+          uptime: {title:'Agent Uptime', seg:[['Content',99.95],['Grader',99.2],['Orchestrator',99.9]], data:[99.8,99.85,99.87,99.9,99.9,99.92,99.92]},
+        };
+        const c = config[key] || {title:key, seg:[], data:[]};
+        drillTitle.textContent = `Drilldown — ${c.title}`;
+        // segments
+        drillSegments.innerHTML = '';
+        c.seg.forEach(([name,val]) => {
+          const li = document.createElement('li');
+          li.className = 'flex items-center justify-between rounded-lg bg-slate-950/60 border border-white/5 px-3 py-2';
+          li.innerHTML = `<span>${name}</span><span class="font-medium">${val}</span>`;
+          drillSegments.appendChild(li);
+        });
+        // trend sparkline SVG
+        drawTrend(drillTrend, c.data);
+        drill.classList.remove('hidden');
+        drill.classList.add('flex');
+      }
+      function closeDrill(){
+        drill.classList.add('hidden');
+        drill.classList.remove('flex');
+      }
+      function drawTrend(svg, data){
+        const w = svg.clientWidth || 300, h = svg.clientHeight || 160; svg.setAttribute('viewBox',`0 0 ${w} ${h}`);
+        svg.innerHTML = '';
+        if (!data.length) return;
+        const min = Math.min(...data), max = Math.max(...data);
+        const pad = 10;
+        const step = (w - pad*2) / (data.length - 1);
+        const points = data.map((v,i)=>{
+          const x = pad + i*step;
+          const y = h - pad - ((v - min)/(max - min || 1))*(h - pad*2);
+          return [x,y];
+        });
+        const path = points.map((p,i)=> (i? 'L':'M') + p[0] + ' ' + p[1]).join(' ');
+        const line = document.createElementNS('http://www.w3.org/2000/svg','path');
+        line.setAttribute('d', path);
+        line.setAttribute('fill','none');
+        line.setAttribute('stroke','rgb(16,185,129)'); // emerald-500
+        line.setAttribute('stroke-width','2');
+        svg.appendChild(line);
+      }
 
-  // Sidebar toggle
-  $('#menuBtn').addEventListener('click',()=> $('#sidebar').classList.toggle('open'));
+      // Search filters
+      function attachSearch(inputId, tableId){
+        const input = document.getElementById(inputId);
+        const table = document.getElementById(tableId);
+        input.addEventListener('input', ()=>{
+          const q = input.value.toLowerCase();
+          table.querySelectorAll('tbody tr').forEach(tr =>{
+            const show = tr.textContent.toLowerCase().includes(q);
+            tr.style.display = show ? '' : 'none';
+          });
+        });
+      }
+      attachSearch('financeSearch','financeTable');
+      attachSearch('activitySearch','activityTable');
 
-  // Theme
-  const themeBtn = $('#themeBtn');
-  const setTheme = t=>{ document.body.setAttribute('data-theme', t); localStorage.setItem('theme', t); themeBtn.setAttribute('aria-pressed', t==='light'); };
-  setTheme(localStorage.getItem('theme')||'dark');
-  themeBtn.onclick = ()=> setTheme(document.body.getAttribute('data-theme')==='dark'?'light':'dark');
+      // Export (CSV/PDF) for tables
+      document.querySelectorAll('[data-export]').forEach(btn =>{
+        btn.classList.add('rounded-xl','border','border-white/10','px-3','py-1.5','text-sm','hover:bg-slate-800');
+        btn.addEventListener('click', async ()=>{
+          const tableId = btn.getAttribute('data-export');
+          const type = btn.getAttribute('data-type');
+          const table = document.getElementById(tableId);
+          if (type === 'csv') exportCSV(table, `${tableId}.csv`);
+          if (type === 'pdf') exportPDF(table, `${tableId}.pdf`);
+        });
+      });
+      function exportCSV(table, filename){
+        const rows=[...table.querySelectorAll('tr')].map(tr=>[...tr.children].map(td=>`"${td.textContent.trim()}"`).join(','));
+        const blob = new Blob([rows.join('\n')], {type:'text/csv;charset=utf-8;'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href=url; a.download=filename; a.click(); URL.revokeObjectURL(url);
+      }
+      async function exportPDF(table, filename){
+        const { jsPDF } = window.jspdf || {};
+        if (!jsPDF || !window.jspdf || !window.jspdf.jsPDF) { alert('Biblioteka PDF nie załadowała się jeszcze. Spróbuj ponownie.'); return; }
+        const doc = new jsPDF({orientation:'l', unit:'pt', format:'a4'});
+        const head = [[...table.querySelectorAll('thead th')].map(th=>th.textContent.trim())];
+        const body = [...table.querySelectorAll('tbody tr')].map(tr=>[...tr.children].map(td=>td.textContent.trim()));
+        doc.text(table.id, 40, 30);
+        doc.autoTable({head, body, startY: 50, styles:{fontSize:8}});
+        doc.save(filename);
+      }
 
-  // Language (cycle PL/EN/DE)
-  const langs=['pl','en','de'];
-  $('#langBtn').onclick = ()=>{ const i=(langs.indexOf(state.lang)+1)%langs.length; state.lang=langs[i]; $('#langLabel').textContent=state.lang.toUpperCase(); showToast('Lang: '+state.lang.toUpperCase()); };
+      // Roles dynamic — add/remove
+      const roleList = document.getElementById('roleList');
+      const newRoleName = document.getElementById('newRoleName');
+      const addRoleBtn = document.getElementById('addRoleBtn');
+      const defaultRoles = ['Owner','Coach','Learner'];
+      const customRoles = new Set(JSON.parse(localStorage.getItem('customRoles')||'[]'));
+      function renderRoles(){
+        roleList.innerHTML = '';
+        [...defaultRoles, ...customRoles].forEach(r=>{
+          const li = document.createElement('li');
+          li.className = 'flex items-center justify-between rounded-lg bg-slate-950/60 border border-white/5 px-3 py-2';
+          const isDefault = defaultRoles.includes(r);
+          li.innerHTML = `<span>${r}</span>`;
+          if (!isDefault){
+            const del = document.createElement('button');
+            del.className = 'rounded-lg border border-white/10 px-2 py-1 text-xs hover:bg-slate-800';
+            del.textContent = 'Usuń';
+            del.addEventListener('click', ()=>{ customRoles.delete(r); persistRoles(); renderRoles(); });
+            li.appendChild(del);
+          } else {
+            const tag = document.createElement('span');
+            tag.className = 'tag rounded-lg px-2 py-0.5 text-xs text-slate-300';
+            tag.textContent = 'Core';
+            li.appendChild(tag);
+          }
+          roleList.appendChild(li);
+        });
+      }
+      function persistRoles(){ localStorage.setItem('customRoles', JSON.stringify([...customRoles])); }
+      addRoleBtn.addEventListener('click', ()=>{
+        const name = (newRoleName.value||'').trim();
+        if (!name) return; customRoles.add(name); newRoleName.value=''; persistRoles(); renderRoles();
+      });
+      renderRoles();
 
-  // Range + Compare
-  $('#rangeSel').addEventListener('change', e=>{ state.range=+e.target.value; $('#rangeLabel').textContent=state.range; $('#revRange').textContent=state.range; updateComparePill(); });
-  $('#compareTgl').addEventListener('change', e=>{ state.compare=e.target.checked; updateComparePill(); });
-  function updateComparePill(){ const pill=$('#comparePill'); pill.style.display = state.compare? 'inline-flex':'none'; pill.innerHTML = `vs poprzednie ${state.range} dni: <b>+${(5+Math.round(Math.random()*12))}%</b>`; $('#lastXdays').innerHTML = `CR PDP, ostatnie <span id="rangeLabel">${state.range}</span> dni`; }
+      // Feedback thumbs
+      document.querySelectorAll('.thumb').forEach(btn=>{
+        btn.addEventListener('click',()=>{
+          const span = btn.querySelector('.count');
+          const v = parseInt(span.textContent||'0',10)+1; span.textContent = v;
+        });
+      });
 
-  // Toast
-  const toast=$('#toast'); const showToast = m=>{ toast.textContent=m; toast.style.display='block'; setTimeout(()=> toast.style.display='none', 1600); };
-  $('#saveBtn').onclick = ()=> showToast('Zapisano ustawienia');
-
-  // Search hotkey
-  window.addEventListener('keydown', e=>{ if(e.key==='/' && document.activeElement!==$('#search')){ e.preventDefault(); $('#search').focus(); } });
-
-  // Mentor Drawer
-  const drawer=$('#mentorDrawer');
-  $('#mentorBtn').onclick = ()=>{ drawer.classList.add('open'); $('#msgInput').focus(); };
-  $('#mentorBackdrop').onclick = $('#mentorClose').onclick = ()=> drawer.classList.remove('open');
-  $('#sendBtn').onclick = ()=>{ const v=$('#msgInput').value.trim(); if(!v) return; const chat=$('#chat'); const me=document.createElement('div'); me.className='msg me'; me.textContent=v; chat.appendChild(me); setTimeout(()=>{ const ai=document.createElement('div'); ai.className='msg ai'; ai.textContent='Oto 3 szybkie kroki: 1) A/B PDP, 2) UGC top SKU, 3) Recovery D+0/D+1/D+3.'; chat.appendChild(ai); chat.scrollTop=chat.scrollHeight; }, 500); $('#msgInput').value=''; };
-  $$('#mentorChips .chip').forEach(c=> c.addEventListener('click', ()=>{ $('#msgInput').value=c.dataset.q; $('#sendBtn').click(); }));
-
-  // Integrations Modal
-  const intM=$('#intModal'); const openInt=()=> intM.classList.add('open'); const closeInt=()=> intM.classList.remove('open');
-  $('#integrationOpen').onclick=openInt; $('#integrationOpen2').onclick=openInt; ['intClose','intCancel','intBackdrop'].forEach(id=> $('#'+id).onclick=closeInt);
-  $('#testBtn').onclick = ()=>{ const s=$('#testStatus'); s.textContent='Testuję…'; setTimeout(()=>{ s.textContent='Połączenie OK'; s.style.color='var(--ok)'; }, 800); };
-  $('#intSave').onclick = ()=>{ closeInt(); showToast('Zapisano integrację'); };
-
-  // Billing Modal
-  const billM=$('#billModal'); const openBill=()=> billM.classList.add('open'); const closeBill=()=> billM.classList.remove('open');
-  $('#billingOpen').onclick=openBill; ['billClose','billCancel','billBackdrop'].forEach(id=> $('#'+id).onclick=closeBill);
-  $('#cancelPlan').onclick = ()=>{ $('#subStatus').textContent='Anulowana (koniec okresu)'; $('#subStatus').style.color='var(--danger)'; };
-  $('#changePlan').onclick = ()=> showToast('Plan zostanie zmieniony przy następnym cyklu (prorata)');
-
-  // Auth Modal (Login/SSO)
-  const authM=$('#authModal'); const openAuth=()=> authM.classList.add('open'); const closeAuth=()=> authM.classList.remove('open');
-  $('#authOpen').onclick=openAuth; ['authClose','authCancel','authBackdrop'].forEach(id=> $('#'+id).onclick=closeAuth);
-
-  // API Keys Modal
-  const apiM=$('#apiModal'); const openAPI=()=> apiM.classList.add('open'); const closeAPI=()=> apiM.classList.remove('open');
-  $('#apiOpen').onclick=openAPI; ['apiClose','apiCancel','apiBackdrop'].forEach(id=> $('#'+id).onclick=closeAPI);
-  $('#genKey').onclick = ()=>{ const key='sk_live_***'+Math.floor(Math.random()*999); const span=document.createElement('span'); span.className='pill'; span.textContent=key; $('#keysBox').appendChild(span); keys.push([key,'read:metrics','przed chwilą']); renderKeys(); };
-
-  // Notifications Modal
-  const nM=$('#notifModal'); const openN=()=> nM.classList.add('open'); const closeN=()=> nM.classList.remove('open');
-  $('#notifBtn').onclick=openN; ['notifClose','notifCancel','notifBackdrop'].forEach(id=> $('#'+id).onclick=closeN);
-
-  // Sparkline
-  function drawSpark(){ const n=24; const vals=Array.from({length:n},(_,i)=>10+Math.sin(i/2)*3+Math.random()*2); const max=Math.max(...vals), min=Math.min(...vals); const norm=v=>56-((v-min)/(max-min))*48-3; const step=300/(n-1); const d=vals.map((v,i)=>`${i?'L':'M'}${(i*step).toFixed(1)},${norm(v).toFixed(1)}`).join(' '); $('#sparkPath').setAttribute('d', d); }
-
-  // Agents (mock) – localized statuses
-  const agents=[
-    {name:'PDP Generator', status:'OK', runs:128}, {name:'Email Retention', status:'OK', runs:512}, {name:'SEO On-Page', status:'OK', runs:71}, {name:'UGC Curator', status:'UWAGA', runs:23}, {name:'Ads Booster', status:'OK', runs:94}, {name:'Merch Reco', status:'OK', runs:63}, {name:'Support Macros', status:'OK', runs:142}, {name:'Anti-Churn', status:'OK', runs:35}
-  ];
-  function renderAgents(){ const wrap=$('#agents'); wrap.innerHTML=''; agents.forEach(a=>{ const color = a.status==='OK'?'var(--ok)':(a.status==='UWAGA'?'var(--warn)':'var(--danger)'); const el=document.createElement('div'); el.style.display='flex'; el.style.justifyContent='space-between'; el.style.alignItems='center'; el.style.border='1px solid var(--border)'; el.style.borderRadius='12px'; el.style.padding='.7rem .8rem'; el.style.marginBottom='.6rem'; el.innerHTML=`<div><strong>${a.name}</strong><div class="muted" style="font-size:.9rem">Uruchomienia: ${a.runs}</div></div><div class="pill" style="border-color:${color}; color:${color}">${a.status}</div>`; wrap.appendChild(el); }); }
-
-  // Activity (no inner scroll, lazy load)
-  let rows=[
-    {type:'agent', desc:'PDP Generator zaktualizował 12 SKU', res:'OK', time:'2 min temu'},
-    {type:'workflow', desc:'Cart Recovery D+0 – wysłano 143 e-maile', res:'+11 zamówień', time:'28 min temu'},
-    {type:'agent', desc:'UGC Curator – brak praw do 2 assetów', res:'UWAGA', time:'1 h temu'},
-    {type:'workflow', desc:'A/B PDP – aktualizacja wariantów', res:'OK', time:'wczoraj'}
-  ];
-  function renderActivity(filter='all', append=false){ const body=$('#activityBody'); if(!append) body.innerHTML=''; rows.filter(r=> filter==='all'||r.type===filter).slice(0, body.children.length+10).forEach((r,i)=>{ const tr=document.createElement('tr'); tr.innerHTML=`<td><span class="pill">${r.type}</span></td><td>${r.desc}</td><td>${r.res}</td><td>${r.time}</td>`; body.appendChild(tr); }); }
-  $('#filterSelect').addEventListener('change', e=>{ $('#activityBody').innerHTML=''; renderActivity(e.target.value); });
-  $('#loadMore').addEventListener('click', ()=> renderActivity($('#filterSelect').value, true));
-
-  // Finance
-  const financeRows=[['2025-08-01','INV-2025-0801','$199','Opłacono'],['2025-07-01','INV-2025-0701','$199','Opłacono'],['2025-06-01','INV-2025-0601','$199','Opłacono']];
-  function renderFinance(){ const tb=$('#finTable'); tb.innerHTML=''; financeRows.forEach(r=>{ const tr=document.createElement('tr'); tr.innerHTML=`<td>${r[0]}</td><td>${r[1]}</td><td>${r[2].replace('.', ',')}</td><td><span class="pill" style="color:var(--ok)">${r[3]}</span></td>`; tb.appendChild(tr); }); const inv=$('#invTable'); inv.innerHTML=''; financeRows.forEach(r=>{ const tr=document.createElement('tr'); tr.innerHTML=`<td>${r[0]}</td><td>${r[1]}</td><td>${r[2].replace('.', ',')}</td><td>${r[3]}</td><td><a class="btn ghost" href="#">PDF</a></td>`; inv.appendChild(tr); }); }
-
-  // Users table (+2FA, last login)
-  const users=[['anna@firma.com','Admin','Tak','dzisiaj 09:12'],['piotr@firma.com','Użytkownik','Nie','wczoraj 21:44'],['ola@agencja.com','Moderator','Tak','3 dni temu']];
-  function renderUsers(){ const tb=$('#usersTable'); tb.innerHTML=''; users.forEach(([u,role,mfa,last])=>{ const tr=document.createElement('tr'); tr.innerHTML=`<td>${u}</td><td><select><option ${role==='Admin'?'selected':''}>Admin</option><option ${role==='Użytkownik'?'selected':''}>Użytkownik</option><option ${role==='Moderator'?'selected':''}>Moderator</option></select></td><td>${mfa}</td><td>${last}</td><td><button class="btn ghost">Reset hasła</button></td>`; tb.appendChild(tr); }); }
-
-  // API keys table (last used)
-  const keys=[["sk_test_***123","read:metrics","2 dni temu"],["sk_live_***987","full-access","5 h temu"]];
-  function renderKeys(){ const tb=$('#keysTable'); tb.innerHTML=''; keys.forEach(([k,scope,last])=>{ const tr=document.createElement('tr'); tr.innerHTML=`<td>${k}</td><td>${scope}</td><td>${last}</td><td><button class="btn ghost">Revoke</button></td>`; tb.appendChild(tr); }); }
-
-  // A/B – keep numeric state and format PL
-  let abA=2.58, abB=2.35; const nA=$('#nA'), nB=$('#nB');
-  function renderAB(){ $('#abA').textContent = fmtPct(abA); $('#abB').textContent = fmtPct(abB); }
-  (function abLoop(){ setInterval(()=>{ abA = +(abA + (Math.random()-.5)*0.03).toFixed(2); abB = +(abB + (Math.random()-.5)*0.03).toFixed(2); renderAB(); // mock significance/ETA
-    const sig = Math.min(99, Math.max(50, Math.round(80 + (abA-abB)*60)));
-    $('#sig').textContent = sig + '%'; $('#eta').textContent = (sig>90? '1 dzień':'2 dni');
-    nA.textContent = (3420 + Math.round(Math.random()*30)).toLocaleString('pl-PL');
-    nB.textContent = (3380 + Math.round(Math.random()*30)).toLocaleString('pl-PL');
-  }, 2500) })();
-
-  // Init
-  $('#year').textContent = new Date().getFullYear();
-  drawSpark(); renderAgents(); renderActivity(); renderFinance(); renderUsers(); renderKeys(); renderAB(); updateComparePill();
-})();
-</script>
+      // Docs button (placeholder)
+      document.getElementById('openDocs').addEventListener('click',()=>{
+        alert('Wersja demo: podłącz swoją dokumentację (np. Docusaurus) tutaj.');
+      });
+    });
+  </script>
 </body>
 </html>
