@@ -12,7 +12,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Zapobiega problemom typu BOM/CRLF w YAML/Dockerfile
+      # Zapobiega BOM/CRLF po stronie runnera (czasem to źródło błędu)
       - name: Ensure LF line endings (avoid YAML BOM/CRLF)
         run: |
           sudo apt-get update -y
@@ -26,6 +26,7 @@ jobs:
 
       - name: Rsync project to server (/var/www/app)
         run: |
+          ssh -p ${{ secrets.SSH_PORT }} ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "mkdir -p /var/www/app"
           rsync -az --delete \
             --exclude ".git" \
             -e "ssh -p ${{ secrets.SSH_PORT }}" \
@@ -37,10 +38,35 @@ jobs:
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_PORT: ${{ secrets.SSH_PORT }}
         run: |
-          ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" 'bash -s' <<'EOF'
+          ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" 'bash -seu' <<'EOF'
           set -euo pipefail
           APP_DIR="/var/www/app"
           cd "$APP_DIR"
 
-          echo "==> Using docker-compose.yml from: $APP_DIR"
-          test -f
+          echo "==> Compose file info"
+          test -f docker-compose.yml || { echo "ERROR: docker-compose.yml missing in $APP_DIR"; ls -la; exit 1; }
+          # Pokaż pierwsze linie + sprawdź, czy nie ma BOM/CRLF
+          head -n 8 docker-compose.yml || true
+          command -v dos2unix >/dev/null 2>&1 && dos2unix -f docker-compose.yml || true
+          sed -i '1s/^\xEF\xBB\xBF//' docker-compose.yml || true
+          printf "Hex first bytes: "; (command -v xxd >/dev/null && xxd -g 1 -l 16 docker-compose.yml || head -c 16 docker-compose.yml | hexdump -C) || true
+
+          # Wybierz właściwą komendę compose (v2 lub v1)
+          if docker compose version >/dev/null 2>&1; then
+            DC="docker compose"
+          elif docker-compose version >/dev/null 2>&1; then
+            DC="docker-compose"
+          else
+            echo "ERROR: Docker Compose not installed"; exit 1
+          fi
+
+          # Walidacja YAML (jeśli coś nie tak, pokaże dokładnie gdzie)
+          $DC config >/dev/null
+
+          # Build & run
+          $DC pull || true
+          $DC up -d --build
+
+          # Sprzątanie (opcjonalnie)
+          docker system prune -f || true
+          EOF
