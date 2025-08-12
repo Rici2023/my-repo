@@ -19,14 +19,25 @@ jobs:
 
       - name: Copy files to server
         run: |
-          rsync -az --delete --exclude ".git" -e "ssh -p ${{ secrets.SSH_PORT }}" ./ ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:~/dashboard-pro/
+          rsync -az --delete --exclude ".git" \
+            -e "ssh -p ${{ secrets.SSH_PORT }} -o StrictHostKeyChecking=no" \
+            ./ ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:~/dashboard-pro/
 
       - name: Deploy via SSH
+        timeout-minutes: 15
         run: |
-          ssh -p ${{ secrets.SSH_PORT }} ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
-          set -e
+          ssh -o ConnectTimeout=10 -p ${{ secrets.SSH_PORT }} \
+            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
+          set -euxo pipefail
           cd ~/dashboard-pro
-          docker compose down
+          docker compose pull
+          docker compose down --timeout 30
           docker compose up -d --build
-          docker system prune -f
+          docker system prune -f --filter "until=24h"
           EOF
+
+      - name: Verify deployment
+        run: |
+          ssh -p ${{ secrets.SSH_PORT }} ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "
+            docker ps --format 'table {{.Names}}\t{{.Status}}' | grep dashboard-pro
+          "
