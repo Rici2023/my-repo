@@ -1,10 +1,14 @@
+version: "3.9"
+
 services:
-  web:
-    image: nginx:alpine
+  app-web:
+    image: your-image:latest   # <--- podmień na swoją
+    container_name: app-web-1
+    # NIE używamy "80:80" ani "8080:80"!
     ports:
-      - "8080:8080" 
-    volumes:
-      - /srv/superkurs/app/public:/usr/share/nginx/html:ro
+      - "127.0.0.1:8081:80"    # tylko loopback -> host
     restart: unless-stopped
-
-
+    # environment:             # (opcjonalnie)
+    #   - NODE_ENV=production
+    # volumes:                 # (opcjonalnie)
+    #   - ./app:/usr/share/nginx/html:ro
