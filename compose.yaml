@@ -1,0 +1,32 @@
+cd /var/www/app
+sudo tee compose.yaml > /dev/null <<'YML'
+version: "3.9"
+services:
+  api:
+    build: ./backend
+    env_file:
+      - ./backend/.env
+    volumes:
+      - ./backend/data:/app/data
+    ports:
+      - "3001:3001"
+    depends_on:
+      - db
+
+  db:
+    image: keinos/sqlite3:latest
+    container_name: dashboardpro-sqlite
+    command: ["/bin/sleep", "infinity"]
+    volumes:
+      - ./backend/data:/data
+
+  web:
+    build: ./frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - api
+YML
+
+docker compose -f compose.yaml config
+docker compose -f compose.yaml up -d --build
