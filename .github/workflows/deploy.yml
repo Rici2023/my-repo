@@ -2,7 +2,7 @@ name: Deploy to Hetzner (Docker Compose)
 
 on:
   push:
-    branches: ["my-repo"]   # ← podmień na swoją gałąź jeśli inna (np. main)
+    branches: ["my-repo"]         # ← podmień na swoją gałąź (np. main)
   workflow_dispatch:
     inputs:
       ref:
@@ -36,7 +36,7 @@ jobs:
           mkdir -p ~/.ssh
           ssh-keyscan -p "${{ secrets.SSH_PORT }}" "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
 
-      # ✅ budujemy archiwum poza bieżącym katalogiem, aby nie pakować samego siebie
+      # budujemy archiwum poza repo, aby nie pakować samego siebie
       - name: Build artifact (tar.gz)
         run: |
           tar --exclude-vcs -czf /tmp/app.tgz .
@@ -48,18 +48,43 @@ jobs:
       - name: Deploy on server (compose up)
         env:
           DEPLOY_PATH: /var/www/app
-          JWT_SECRET: ${{ secrets.JWT_SECRET }}   # opcjonalnie
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}   # opcjonalnie – wygeneruje backend/.env jeśli go brak
         run: |
           ssh -p "${{ secrets.SSH_PORT }}" "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" 'bash -seu' <<'EOF'
           set -euo pipefail
           DEPLOY_PATH="${DEPLOY_PATH:-/var/www/app}"
-
           mkdir -p "$DEPLOY_PATH"
+
+          # Zachowaj backend/.env i backend/data, wyczyść resztę (pełna synchronizacja)
+          TMP="$(mktemp -d)"
+          if [ -f "$DEPLOY_PATH/backend/.env" ]; then
+            mkdir -p "$TMP/backend"
+            cp -a "$DEPLOY_PATH/backend/.env" "$TMP/backend/.env"
+          fi
+          if [ -d "$DEPLOY_PATH/backend/data" ]; then
+            mkdir -p "$TMP/backend/data"
+            rsync -a "$DEPLOY_PATH/backend/data/" "$TMP/backend/data/" || true
+          fi
+          find "$DEPLOY_PATH" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+
+          # Wgraj nową wersję
           tar xzf /tmp/app.tgz -C "$DEPLOY_PATH"
           rm -f /tmp/app.tgz
+
+          # Przywróć zachowane pliki
+          if [ -f "$TMP/backend/.env" ]; then
+            mkdir -p "$DEPLOY_PATH/backend"
+            mv "$TMP/backend/.env" "$DEPLOY_PATH/backend/.env"
+          fi
+          if [ -d "$TMP/backend/data" ]; then
+            mkdir -p "$DEPLOY_PATH/backend/data"
+            rsync -a "$TMP/backend/data/" "$DEPLOY_PATH/backend/data/" || true
+          fi
+          rm -rf "$TMP"
+
           cd "$DEPLOY_PATH"
 
-          # wybór pliku compose
+          # Wybór compose file
           if [ -f compose.yaml ]; then
             COMPOSE=compose.yaml
           elif [ -f docker-compose.yml ]; then
@@ -68,8 +93,32 @@ jobs:
             echo "❌ Brak compose.yaml / docker-compose.yml w $DEPLOY_PATH"; ls -la; exit 1
           fi
 
-          # normalizacja (BOM/CRLF)
+          # Normalizacja (BOM/CRLF)
           sed -i '1s/^\xEF\xBB\xBF//' "$COMPOSE" || true
           tr -d '\r' < "$COMPOSE" > .tmp && mv .tmp "$COMPOSE"
 
-          # backend/.env z sekretu (jeśli podany i plik nie istn
+          # Stwórz backend/.env z sekretu, jeśli nadal go nie ma
+          mkdir -p backend
+          if [ ! -f backend/.env ] && [ -n "${JWT_SECRET:-}" ]; then
+            cat > backend/.env <<ENV
+          JWT_SECRET=${JWT_SECRET}
+          PORT=3001
+          NODE_ENV=production
+          DB_PATH=./data/app.db
+          CORS_ORIGIN=*
+          COOKIE_SECURE=false
+          ENV
+          fi
+
+          # Compose v2/v1
+          if docker compose version >/dev/null 2>&1; then
+            DC="docker compose"
+          else
+            DC="docker-compose"
+          fi
+
+          # Walidacja i uruchomienie
+          $DC -f "$COMPOSE" config >/dev/null
+          $DC -f "$COMPOSE" up -d --build
+          $DC -f "$COMPOSE" ps
+          EOF
