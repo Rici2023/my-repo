@@ -2,54 +2,76 @@ name: Deploy to Hetzner (Docker Compose)
 
 on:
   push:
-    branches: ["my-repo"]   # ← podmień na swoją gałąź, jeśli inna (np. main)
-  workflow_dispatch: {}
+    branches: ["my-repo"]      # ← podmień na swoją gałąź (np. main) jeśli trzeba
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Gałąź/tag/SHA do wdrożenia"
+        required: false
+        default: "my-repo"
+
+concurrency:
+  group: deploy-hetzner
+  cancel-in-progress: true
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.ref || github.ref_name }}
 
-      - name: Setup SSH
+      - name: Setup SSH agent
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
-      - name: Rsync project to server
+      - name: Trust server host key
         run: |
-          rsync -az --delete \
-            --exclude ".git" \
-            -e "ssh -p ${{ secrets.SSH_PORT }}" \
-            ./ ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/var/www/app/
+          mkdir -p ~/.ssh
+          ssh-keyscan -p "${{ secrets.SSH_PORT }}" "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
 
-      - name: Build & run on server
-        env:
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_PORT: ${{ secrets.SSH_PORT }}
-          SSH_USER: ${{ secrets.SSH_USER }}
-          JWT_SECRET: ${{ secrets.JWT_SECRET }}   # opcjonalnie; jeśli nie ustawisz, nie nadpisze .env
+      - name: Build artifact (tar.gz)
         run: |
-          ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" 'bash -seu' <<'EOF'
+          tar --exclude-vcs -czf app.tgz .
+
+      - name: Upload artifact to server
+        run: |
+          scp -P "${{ secrets.SSH_PORT }}" app.tgz "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/tmp/app.tgz"
+
+      - name: Deploy on server (compose up)
+        env:
+          DEPLOY_PATH: /var/www/app
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}   # opcjonalnie; jeśli brak, .env nie zostanie wygenerowany
+        run: |
+          ssh -p "${{ secrets.SSH_PORT }}" "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" 'bash -seu' <<'EOF'
           set -euo pipefail
-          cd /var/www/app
+          DEPLOY_PATH="${DEPLOY_PATH:-/var/www/app}"
+
+          mkdir -p "$DEPLOY_PATH"
+          tar xzf /tmp/app.tgz -C "$DEPLOY_PATH"
+          rm -f /tmp/app.tgz
+          cd "$DEPLOY_PATH"
 
           # wybór pliku compose
           if [ -f compose.yaml ]; then
             COMPOSE=compose.yaml
           elif [ -f docker-compose.yml ]; then
-            cp docker-compose.yml compose.yaml
-            COMPOSE=compose.yaml
+            COMPOSE=docker-compose.yml
           else
-            echo "❌ Brak compose.yaml / docker-compose.yml w /var/www/app"; ls -la; exit 1
+            echo "❌ Brak compose.yaml / docker-compose.yml w $DEPLOY_PATH"; ls -la; exit 1
           fi
 
           # normalizacja (BOM/CRLF)
           sed -i '1s/^\xEF\xBB\xBF//' "$COMPOSE" || true
           tr -d '\r' < "$COMPOSE" > .tmp && mv .tmp "$COMPOSE"
 
-          # upewnij się, że backend/.env istnieje (z GitHub Secrets, jeśli podany)
+          # backend/.env z sekretu (jeśli podany i plik nie istnieje)
           mkdir -p backend
           if [ ! -f backend/.env ] && [ -n "${JWT_SECRET:-}" ]; then
             cat > backend/.env <<ENV
@@ -64,6 +86,10 @@ jobs:
 
           # wybór komendy compose (v2/v1)
           if docker compose version >/dev/null 2>&1; then DC="docker compose"; else DC="docker-compose"; fi
+
+          echo "---- $(pwd)/$COMPOSE (head) ----"
+          head -n 20 "$COMPOSE" || true
+          echo "--------------------------------"
 
           # walidacja i uruchomienie
           $DC -f "$COMPOSE" config >/dev/null
