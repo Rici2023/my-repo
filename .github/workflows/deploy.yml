@@ -2,7 +2,7 @@ name: Deploy to Hetzner (Docker Compose)
 
 on:
   push:
-    branches: ["my-repo"]         # ← podmień na swoją gałąź (np. main)
+    branches: ["my-repo"]         # ← zmień na swoją gałąź (np. main), jeśli trzeba
   workflow_dispatch:
     inputs:
       ref:
@@ -36,7 +36,6 @@ jobs:
           mkdir -p ~/.ssh
           ssh-keyscan -p "${{ secrets.SSH_PORT }}" "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
 
-      # budujemy archiwum poza repo, aby nie pakować samego siebie
       - name: Build artifact (tar.gz)
         run: |
           tar --exclude-vcs -czf /tmp/app.tgz .
@@ -48,14 +47,14 @@ jobs:
       - name: Deploy on server (compose up)
         env:
           DEPLOY_PATH: /var/www/app
-          JWT_SECRET: ${{ secrets.JWT_SECRET }}   # opcjonalnie – wygeneruje backend/.env jeśli go brak
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}   # opcjonalnie – jeśli brak, wygenerujemy losowy
         run: |
           ssh -p "${{ secrets.SSH_PORT }}" "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" 'bash -seu' <<'EOF'
           set -euo pipefail
           DEPLOY_PATH="${DEPLOY_PATH:-/var/www/app}"
           mkdir -p "$DEPLOY_PATH"
 
-          # Zachowaj backend/.env i backend/data, wyczyść resztę (pełna synchronizacja)
+          # Zachowaj backend/.env i backend/data, resztę wyczyść (pełna synchronizacja)
           TMP="$(mktemp -d)"
           if [ -f "$DEPLOY_PATH/backend/.env" ]; then
             mkdir -p "$TMP/backend"
@@ -97,11 +96,17 @@ jobs:
           sed -i '1s/^\xEF\xBB\xBF//' "$COMPOSE" || true
           tr -d '\r' < "$COMPOSE" > .tmp && mv .tmp "$COMPOSE"
 
-          # Stwórz backend/.env z sekretu, jeśli nadal go nie ma
+          # Upewnij się, że backend/.env istnieje – jeśli nie, utwórz
           mkdir -p backend
-          if [ ! -f backend/.env ] && [ -n "${JWT_SECRET:-}" ]; then
+          if [ ! -f backend/.env ]; then
+            if [ -n "${JWT_SECRET:-}" ]; then
+              SECRET="${JWT_SECRET}"
+            else
+              # losowy 64-znakowy hex (fallback bez openssl)
+              SECRET="$( (openssl rand -hex 32 2>/dev/null) || (head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n') )"
+            fi
             cat > backend/.env <<ENV
-          JWT_SECRET=${JWT_SECRET}
+          JWT_SECRET=${SECRET}
           PORT=3001
           NODE_ENV=production
           DB_PATH=./data/app.db
@@ -116,6 +121,10 @@ jobs:
           else
             DC="docker-compose"
           fi
+
+          echo "---- $(pwd)/$COMPOSE (head) ----"
+          head -n 20 "$COMPOSE" || true
+          echo "--------------------------------"
 
           # Walidacja i uruchomienie
           $DC -f "$COMPOSE" config >/dev/null
