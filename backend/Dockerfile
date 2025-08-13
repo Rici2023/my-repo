@@ -1,30 +1,37 @@
 # backend/Dockerfile
-FROM node:20-alpine AS runtime
+# Stabilna baza na Debianie (mniej problemów z modułami natywnymi niż Alpine)
+FROM node:20-bookworm-slim AS runtime
 WORKDIR /app
 
-# 1) systemowe zależności do budowy modułów natywnych
-#    - .build-deps: tylko na czas builda
-#    - sqlite-libs: biblioteka runtime (zostaje)
-RUN apk add --no-cache --virtual .build-deps python3 make g++ pkgconfig sqlite-dev \
-    && apk add --no-cache sqlite-libs
+# 1) Narzędzia do budowy modułów natywnych + sqlite (często wymagane przez sqlite3/better-sqlite3/bcrypt)
+RUN apt-get update -y \
+ && apt-get install -y --no-install-recommends \
+      python3 make g++ git pkg-config libsqlite3-dev ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
 
-# 2) paczki npm: kopiujemy manifesty (lock opcjonalny)
+# 2) Manifesty pakietów (lock opcjonalny)
 COPY package*.json ./
 
-# 3) instalacja prod zależności (fallback jeśli nie ma package-lock.json)
-#    wyłączamy "audit" i "fund", żeby logi były czyste
+# 3) Instalacja zależności produkcyjnych
+#    - jeśli jest package-lock.json → npm ci
+#    - jeśli nie ma locka → npm install
 RUN npm set audit false && npm set fund false \
-    && ( npm ci --omit=dev || npm install --omit=dev )
+ && if [ -f package-lock.json ]; then \
+      npm ci --omit=dev --no-audit --no-fund; \
+    else \
+      npm install --omit=dev --no-audit --no-fund; \
+    fi
 
-# 4) reszta źródeł
+# 4) Reszta źródeł
 COPY . .
 
+# 5) Ustawienia runtime
 ENV NODE_ENV=production
 ENV PORT=3001
 EXPOSE 3001
 
-# 5) sprzątanie: cache npm + usunięcie narzędzi buildowych
-RUN npm cache clean --force || true \
-    && apk del .build-deps || true
+# 6) Sprzątanie cache
+RUN npm cache clean --force || true
 
+# 7) Start aplikacji
 CMD ["node", "server.js"]
