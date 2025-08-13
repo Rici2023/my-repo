@@ -2,105 +2,71 @@ name: Deploy to Hetzner (Docker Compose)
 
 on:
   push:
-    branches: ["**"]     # uruchamiaj na każdy push (możesz zmienić np. na ["main"])
-  workflow_dispatch: {}  # możliwość ręcznego odpalenia
-
-concurrency:
-  group: deploy-hetzner
-  cancel-in-progress: true
+    branches: ["my-repo"]   # ← podmień na swoją gałąź, jeśli inna (np. main)
+  workflow_dispatch: {}
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-
-    env:
-      SSH_HOST: ${{ secrets.SSH_HOST }}
-      SSH_USER: ${{ secrets.SSH_USER }}
-      SSH_PORT: ${{ secrets.SSH_PORT }}      # jeśli puste, w skryptach użyjemy 22
-      ENV_PROD: ${{ secrets.ENV_PROD }}      # opcjonalnie treść .env
-      HEALTHCHECK_URL: ${{ secrets.HEALTHCHECK_URL }} # opcjonalnie własny URL, inaczej użyjemy IP:8080
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Validate required secrets
-        run: |
-          set -euo pipefail
-          [ -n "${SSH_HOST:-}" ] || { echo "Missing secret: SSH_HOST"; exit 1; }
-          [ -n "${SSH_USER:-}" ] || { echo "Missing secret: SSH_USER"; exit 1; }
-
-      - name: Setup SSH agent
+      - name: Setup SSH
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
-      - name: Add host to known_hosts
-        run: |
-          set -euo pipefail
-          mkdir -p ~/.ssh
-          ssh-keyscan -T 15 -p "${SSH_PORT:-22}" "${SSH_HOST}" >> ~/.ssh/known_hosts
-
-      - name: Test SSH connectivity
-        run: |
-          set -euxo pipefail
-          ssh -p "${SSH_PORT:-22}" -o BatchMode=yes \
-            "${SSH_USER}@${SSH_HOST}" "echo 'ssh ok'; whoami; hostname; pwd"
-
-      - name: Ensure /var/www/app exists (and permissions)
-        run: |
-          set -euxo pipefail
-          ssh -p "${SSH_PORT:-22}" "${SSH_USER}@${SSH_HOST}" \
-            "sudo mkdir -p /var/www/app && sudo chown -R ${SSH_USER}:${SSH_USER} /var/www/app"
-
       - name: Rsync project to server
         run: |
-          set -euxo pipefail
-          RSYNC_RSH="ssh -p ${SSH_PORT:-22} -o StrictHostKeyChecking=yes"
-          rsync -azv --delete \
+          rsync -az --delete \
             --exclude ".git" \
-            --exclude ".github" \
-            --exclude "node_modules" \
-            -e "$RSYNC_RSH" \
-            ./ "${SSH_USER}@${SSH_HOST}:/var/www/app"
+            -e "ssh -p ${{ secrets.SSH_PORT }}" \
+            ./ ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/var/www/app/
 
-      - name: Upload .env to server (only if ENV_PROD set)
+      - name: Build & run on server
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}   # opcjonalnie; jeśli nie ustawisz, nie nadpisze .env
         run: |
-          set -euxo pipefail
-          if [ -n "${ENV_PROD:-}" ]; then
-            echo "${ENV_PROD}" > .env
-            scp -P "${SSH_PORT:-22}" .env "${SSH_USER}@${SSH_HOST}:/var/www/app/.env"
-            rm -f .env
+          ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" 'bash -seu' <<'EOF'
+          set -euo pipefail
+          cd /var/www/app
+
+          # wybór pliku compose
+          if [ -f compose.yaml ]; then
+            COMPOSE=compose.yaml
+          elif [ -f docker-compose.yml ]; then
+            cp docker-compose.yml compose.yaml
+            COMPOSE=compose.yaml
           else
-            echo "No ENV_PROD secret set, skipping .env upload."
+            echo "❌ Brak compose.yaml / docker-compose.yml w /var/www/app"; ls -la; exit 1
           fi
 
-      - name: Check docker on server
-        run: |
-          set -euxo pipefail
-          ssh -p "${SSH_PORT:-22}" "${SSH_USER}@${SSH_HOST}" \
-            "docker --version || true; docker compose version || true"
+          # normalizacja (BOM/CRLF)
+          sed -i '1s/^\xEF\xBB\xBF//' "$COMPOSE" || true
+          tr -d '\r' < "$COMPOSE" > .tmp && mv .tmp "$COMPOSE"
 
-      - name: Build & run with Docker Compose
-        run: |
-          set -euxo pipefail
-          ssh -p "${SSH_PORT:-22}" "${SSH_USER}@${SSH_HOST}" << 'EOF'
-          set -euxo pipefail
-          cd /var/www/app
-          # Opcjonalna walidacja: czy jest docker-compose.yml?
-          test -f docker-compose.yml || { echo "docker-compose.yml not found in /var/www/app"; exit 1; }
+          # upewnij się, że backend/.env istnieje (z GitHub Secrets, jeśli podany)
+          mkdir -p backend
+          if [ ! -f backend/.env ] && [ -n "${JWT_SECRET:-}" ]; then
+            cat > backend/.env <<ENV
+          JWT_SECRET=${JWT_SECRET}
+          PORT=3001
+          NODE_ENV=production
+          DB_PATH=./data/app.db
+          CORS_ORIGIN=*
+          COOKIE_SECURE=false
+          ENV
+          fi
 
-          docker compose pull || true
-          docker compose build --no-cache
-          docker compose up -d --remove-orphans
-          docker compose ps
+          # wybór komendy compose (v2/v1)
+          if docker compose version >/dev/null 2>&1; then DC="docker compose"; else DC="docker-compose"; fi
+
+          # walidacja i uruchomienie
+          $DC -f "$COMPOSE" config >/dev/null
+          $DC -f "$COMPOSE" up -d --build
+          $DC -f "$COMPOSE" ps
           EOF
-
-      - name: Healthcheck
-        continue-on-error: true
-        run: |
-          set -euxo pipefail
-          URL="${HEALTHCHECK_URL:-http://${SSH_HOST}:8080/}"
-          echo "Checking: $URL"
-          curl -fsS --max-time 20 "$URL" || echo "Healthcheck failed (not failing the job)"
