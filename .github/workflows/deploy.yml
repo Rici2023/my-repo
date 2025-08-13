@@ -2,7 +2,7 @@ name: Deploy to Hetzner (Docker Compose)
 
 on:
   push:
-    branches: ["my-repo"]      # ← podmień na swoją gałąź (np. main) jeśli trzeba
+    branches: ["my-repo"]   # ← podmień na swoją gałąź jeśli inna (np. main)
   workflow_dispatch:
     inputs:
       ref:
@@ -36,18 +36,19 @@ jobs:
           mkdir -p ~/.ssh
           ssh-keyscan -p "${{ secrets.SSH_PORT }}" "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
 
+      # ✅ budujemy archiwum poza bieżącym katalogiem, aby nie pakować samego siebie
       - name: Build artifact (tar.gz)
         run: |
-          tar --exclude-vcs -czf app.tgz .
+          tar --exclude-vcs -czf /tmp/app.tgz .
 
       - name: Upload artifact to server
         run: |
-          scp -P "${{ secrets.SSH_PORT }}" app.tgz "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/tmp/app.tgz"
+          scp -P "${{ secrets.SSH_PORT }}" /tmp/app.tgz "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/tmp/app.tgz"
 
       - name: Deploy on server (compose up)
         env:
           DEPLOY_PATH: /var/www/app
-          JWT_SECRET: ${{ secrets.JWT_SECRET }}   # opcjonalnie; jeśli brak, .env nie zostanie wygenerowany
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}   # opcjonalnie
         run: |
           ssh -p "${{ secrets.SSH_PORT }}" "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" 'bash -seu' <<'EOF'
           set -euo pipefail
@@ -71,28 +72,4 @@ jobs:
           sed -i '1s/^\xEF\xBB\xBF//' "$COMPOSE" || true
           tr -d '\r' < "$COMPOSE" > .tmp && mv .tmp "$COMPOSE"
 
-          # backend/.env z sekretu (jeśli podany i plik nie istnieje)
-          mkdir -p backend
-          if [ ! -f backend/.env ] && [ -n "${JWT_SECRET:-}" ]; then
-            cat > backend/.env <<ENV
-          JWT_SECRET=${JWT_SECRET}
-          PORT=3001
-          NODE_ENV=production
-          DB_PATH=./data/app.db
-          CORS_ORIGIN=*
-          COOKIE_SECURE=false
-          ENV
-          fi
-
-          # wybór komendy compose (v2/v1)
-          if docker compose version >/dev/null 2>&1; then DC="docker compose"; else DC="docker-compose"; fi
-
-          echo "---- $(pwd)/$COMPOSE (head) ----"
-          head -n 20 "$COMPOSE" || true
-          echo "--------------------------------"
-
-          # walidacja i uruchomienie
-          $DC -f "$COMPOSE" config >/dev/null
-          $DC -f "$COMPOSE" up -d --build
-          $DC -f "$COMPOSE" ps
-          EOF
+          # backend/.env z sekretu (jeśli podany i plik nie istn
