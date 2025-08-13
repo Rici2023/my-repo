@@ -2,13 +2,10 @@ name: Deploy to Hetzner (Docker Compose)
 
 on:
   push:
-    branches: ["my-repo"]         # ← zmień na swoją gałąź (np. main), jeśli trzeba
-  workflow_dispatch:
-    inputs:
-      ref:
-        description: "Gałąź/tag/SHA do wdrożenia"
-        required: false
-        default: "my-repo"
+    branches:
+      - main
+      - my-repo        # ← dodaj/zmień według tego, skąd wypychasz kod
+  workflow_dispatch: {}
 
 concurrency:
   group: deploy-hetzner
@@ -24,7 +21,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.ref || github.ref_name }}
+          fetch-depth: 1
+
+      - name: Sanity check – pokaż co checkoutowaliśmy
+        run: |
+          echo "Gałąź: ${{ github.ref_name }}"
+          echo "Repo root:"
+          pwd
+          ls -la
+          echo "backend/:"
+          ls -la backend || true
+          echo "frontend/:"
+          ls -la frontend || true
+          # twardy check
+          test -d backend || (echo "❌ Brak katalogu backend/ w tej gałęzi (${{ github.ref_name }})" && exit 1)
+          test -d frontend || (echo "❌ Brak katalogu frontend/ w tej gałęzi (${{ github.ref_name }})" && exit 1)
 
       - name: Setup SSH agent
         uses: webfactory/ssh-agent@v0.9.0
@@ -38,6 +49,7 @@ jobs:
 
       - name: Build artifact (tar.gz)
         run: |
+          # pakujemy CAŁE repo (poza VCS) do /tmp
           tar --exclude-vcs -czf /tmp/app.tgz .
 
       - name: Upload artifact to server
@@ -47,64 +59,49 @@ jobs:
       - name: Deploy on server (compose up)
         env:
           DEPLOY_PATH: /var/www/app
-          JWT_SECRET: ${{ secrets.JWT_SECRET }}   # opcjonalnie – jeśli brak, wygenerujemy losowy
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}   # opcjonalnie – wygeneruje backend/.env jeśli go brak
         run: |
           ssh -p "${{ secrets.SSH_PORT }}" "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" 'bash -seu' <<'EOF'
           set -euo pipefail
           DEPLOY_PATH="${DEPLOY_PATH:-/var/www/app}"
           mkdir -p "$DEPLOY_PATH"
 
-          # Zachowaj backend/.env i backend/data, resztę wyczyść (pełna synchronizacja)
+          # Zachowaj backend/.env i backend/data między rolloutami
           TMP="$(mktemp -d)"
-          if [ -f "$DEPLOY_PATH/backend/.env" ]; then
-            mkdir -p "$TMP/backend"
-            cp -a "$DEPLOY_PATH/backend/.env" "$TMP/backend/.env"
-          fi
-          if [ -d "$DEPLOY_PATH/backend/data" ]; then
-            mkdir -p "$TMP/backend/data"
-            rsync -a "$DEPLOY_PATH/backend/data/" "$TMP/backend/data/" || true
-          fi
+          if [ -f "$DEPLOY_PATH/backend/.env" ]; then mkdir -p "$TMP/backend"; cp -a "$DEPLOY_PATH/backend/.env" "$TMP/backend/.env"; fi
+          if [ -d "$DEPLOY_PATH/backend/data" ]; then mkdir -p "$TMP/backend/data"; rsync -a "$DEPLOY_PATH/backend/data/" "$TMP/backend/data/" || true; fi
+
+          # Wyczyść katalog docelowy (zostanie odtworzony z paczki)
           find "$DEPLOY_PATH" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
 
-          # Wgraj nową wersję
+          # Rozpakuj nową wersję
           tar xzf /tmp/app.tgz -C "$DEPLOY_PATH"
           rm -f /tmp/app.tgz
 
           # Przywróć zachowane pliki
-          if [ -f "$TMP/backend/.env" ]; then
-            mkdir -p "$DEPLOY_PATH/backend"
-            mv "$TMP/backend/.env" "$DEPLOY_PATH/backend/.env"
-          fi
-          if [ -d "$TMP/backend/data" ]; then
-            mkdir -p "$DEPLOY_PATH/backend/data"
-            rsync -a "$TMP/backend/data/" "$DEPLOY_PATH/backend/data/" || true
-          fi
+          if [ -f "$TMP/backend/.env" ]; then mkdir -p "$DEPLOY_PATH/backend"; mv "$TMP/backend/.env" "$DEPLOY_PATH/backend/.env"; fi
+          if [ -d "$TMP/backend/data" ]; then mkdir -p "$DEPLOY_PATH/backend/data"; rsync -a "$TMP/backend/data/" "$DEPLOY_PATH/backend/data/" || true; fi
           rm -rf "$TMP"
 
           cd "$DEPLOY_PATH"
 
-          # Wybór compose file
-          if [ -f compose.yaml ]; then
-            COMPOSE=compose.yaml
-          elif [ -f docker-compose.yml ]; then
-            COMPOSE=docker-compose.yml
+          # Wybierz plik compose
+          if [ -f compose.yaml ]; then COMPOSE=compose.yaml
+          elif [ -f docker-compose.yml ]; then COMPOSE=docker-compose.yml
           else
-            echo "❌ Brak compose.yaml / docker-compose.yml w $DEPLOY_PATH"; ls -la; exit 1
+            echo "❌ Brak compose.yaml / docker-compose.yml w $DEPLOY_PATH"
+            ls -la
+            exit 1
           fi
 
           # Normalizacja (BOM/CRLF)
           sed -i '1s/^\xEF\xBB\xBF//' "$COMPOSE" || true
           tr -d '\r' < "$COMPOSE" > .tmp && mv .tmp "$COMPOSE"
 
-          # Upewnij się, że backend/.env istnieje – jeśli nie, utwórz
+          # backend/.env – utwórz jeśli nie istnieje
           mkdir -p backend
           if [ ! -f backend/.env ]; then
-            if [ -n "${JWT_SECRET:-}" ]; then
-              SECRET="${JWT_SECRET}"
-            else
-              # losowy 64-znakowy hex (fallback bez openssl)
-              SECRET="$( (openssl rand -hex 32 2>/dev/null) || (head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n') )"
-            fi
+            if [ -n "${JWT_SECRET:-}" ]; then SECRET="${JWT_SECRET}"; else SECRET="$( (openssl rand -hex 32 2>/dev/null) || (head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n') )"; fi
             cat > backend/.env <<ENV
           JWT_SECRET=${SECRET}
           PORT=3001
@@ -115,16 +112,8 @@ jobs:
           ENV
           fi
 
-          # Compose v2/v1
-          if docker compose version >/dev/null 2>&1; then
-            DC="docker compose"
-          else
-            DC="docker-compose"
-          fi
-
-          echo "---- $(pwd)/$COMPOSE (head) ----"
-          head -n 20 "$COMPOSE" || true
-          echo "--------------------------------"
+          # Wybierz polecenie compose (v2/v1)
+          if docker compose version >/dev/null 2>&1; then DC="docker compose"; else DC="docker-compose"; fi
 
           # Walidacja i uruchomienie
           $DC -f "$COMPOSE" config >/dev/null
