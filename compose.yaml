@@ -2,13 +2,13 @@ services:
   api:
     build:
       context: ./backend
+      dockerfile: Dockerfile
     env_file:
       - ./backend/.env
     volumes:
       - ./backend/data:/app/data
     ports:
       - "3001:3001"
-    restart: unless-stopped
 
   web:
     build:
